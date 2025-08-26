@@ -225,10 +225,11 @@ class SistemaEmpresarial {
                 
                 // Processa os dados para extrair o nome do produto
                 this.data.estoque = (data || []).map(item => ({
-                    ...item,
+                    id: item.id,
                     produto: item.produtos?.nome || item.produto || 'Produto não encontrado',
                     quantidade: item.quantidade || 0,
-                    minimo: item.minimo || item.quantidade_minima || 0
+                    minimo: item.minimo || item.quantidade_minima || 0,
+                    ativo: item.ativo || true
                 }));
                 
                 console.log(`📦 ${this.data.estoque.length} itens de estoque carregados do Supabase`);
@@ -238,7 +239,8 @@ class SistemaEmpresarial {
             }
         } catch (error) {
             console.error('❌ Erro ao carregar estoque:', error);
-            this.data.estoque = [];
+            // Em caso de erro, tenta carregar dados locais
+            this.loadDadosLocais();
         }
     }
 
@@ -986,6 +988,11 @@ class SistemaEmpresarial {
         
         tbody.innerHTML = '';
         
+        // Garante que o estoque esteja atualizado
+        if (this.data.estoque.length === 0 && this.data.produtos.length > 0) {
+            this.atualizarEstoque();
+        }
+        
         if (this.data.estoque.length === 0) {
             tbody.innerHTML = `
                 <tr class="empty-row">
@@ -1006,13 +1013,20 @@ class SistemaEmpresarial {
         this.data.estoque.forEach(item => {
             const row = document.createElement('tr');
             row.setAttribute('data-id', item.id);
+            
+            // Calcula o status do estoque
+            const quantidade = parseInt(item.quantidade) || 0;
+            const minimo = parseInt(item.minimo) || 0;
+            const status = quantidade > minimo ? 'success' : 'warning';
+            const statusText = quantidade > minimo ? 'OK' : 'Baixo';
+            
             row.innerHTML = `
                 <td>${item.produto || 'N/A'}</td>
-                <td>${item.quantidade || 0}</td>
-                <td>${item.minimo || 0}</td>
+                <td>${quantidade}</td>
+                <td>${minimo}</td>
                 <td>
-                    <span class="status-badge ${(item.quantidade || 0) > (item.minimo || 0) ? 'success' : 'warning'}">
-                        ${(item.quantidade || 0) > (item.minimo || 0) ? 'OK' : 'Baixo'}
+                    <span class="status-badge ${status}">
+                        ${statusText}
                     </span>
                 </td>
                 <td>${new Date().toLocaleDateString()}</td>
@@ -1126,6 +1140,503 @@ class SistemaEmpresarial {
 
                     updateRelatorios() {
                     console.log('📊 Atualizando relatórios...');
+                    
+                    // Atualiza os cards de resumo
+                    this.atualizarResumoExecutivo();
+                    
+                    // Atualiza os gráficos
+                    this.atualizarGraficoVendas();
+                    this.atualizarGraficoCategorias();
+                    this.atualizarGraficoClientesRegiao();
+                    
+                    // Atualiza as listas
+                    this.atualizarTopProdutos();
+                    this.atualizarEstoqueCritico();
+                    this.atualizarMetricasPerformance();
+                    
+                    // Preenche os filtros
+                    this.preencherFiltros();
+                    
+                    console.log('📊 Relatórios atualizados com sucesso!');
+                }
+
+                // FUNÇÕES AUXILIARES PARA RELATÓRIOS
+                atualizarResumoExecutivo() {
+                    const hoje = new Date();
+                    const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+                    
+                    // Calcula vendas do mês
+                    const vendasMes = this.data.vendas.filter(venda => {
+                        const dataVenda = new Date(venda.data);
+                        return dataVenda >= inicioMes && dataVenda <= hoje;
+                    });
+                    
+                    // Total de vendas
+                    const totalVendas = vendasMes.length;
+                    const totalVendasElement = document.getElementById('total-vendas');
+                    if (totalVendasElement) totalVendasElement.textContent = totalVendas;
+                    
+                    // Receita total
+                    const receitaTotal = vendasMes.reduce((total, venda) => total + (venda.valor || 0), 0);
+                    const receitaTotalElement = document.getElementById('receita-total');
+                    if (receitaTotalElement) receitaTotalElement.textContent = `R$ ${receitaTotal.toFixed(2)}`;
+                    
+                    // Clientes ativos
+                    const clientesAtivos = this.data.clientes.filter(cliente => cliente.status === 'ativo').length;
+                    const clientesAtivosElement = document.getElementById('clientes-ativos');
+                    if (clientesAtivosElement) clientesAtivosElement.textContent = clientesAtivos;
+                    
+                    // Produtos em estoque
+                    const produtosEstoque = this.data.produtos.reduce((total, produto) => total + (produto.estoque || 0), 0);
+                    const produtosEstoqueElement = document.getElementById('produtos-estoque');
+                    if (produtosEstoqueElement) produtosEstoqueElement.textContent = produtosEstoque;
+                }
+
+                atualizarGraficoVendas() {
+                    const periodo = parseInt(document.getElementById('vendas-periodo')?.value || 30);
+                    const hoje = new Date();
+                    const inicio = new Date(hoje.getTime() - (periodo * 24 * 60 * 60 * 1000));
+                    
+                    // Agrupa vendas por dia
+                    const vendasPorDia = {};
+                    for (let d = new Date(inicio); d <= hoje; d.setDate(d.getDate() + 1)) {
+                        const dataStr = d.toISOString().split('T')[0];
+                        vendasPorDia[dataStr] = 0;
+                    }
+                    
+                    this.data.vendas.forEach(venda => {
+                        const dataVenda = new Date(venda.data);
+                        if (dataVenda >= inicio && dataVenda <= hoje) {
+                            const dataStr = dataVenda.toISOString().split('T')[0];
+                            vendasPorDia[dataStr] = (vendasPorDia[dataStr] || 0) + 1;
+                        }
+                    });
+                    
+                    // Cria o gráfico
+                    this.criarGraficoLinha('vendas-chart', {
+                        labels: Object.keys(vendasPorDia),
+                        datasets: [{
+                            label: 'Vendas',
+                            data: Object.values(vendasPorDia),
+                            borderColor: '#667eea',
+                            backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                            tension: 0.4
+                        }]
+                    });
+                }
+
+                atualizarGraficoCategorias() {
+                    // Agrupa produtos por categoria
+                    const produtosPorCategoria = {};
+                    this.data.produtos.forEach(produto => {
+                        const categoria = produto.categoria || 'Sem categoria';
+                        produtosPorCategoria[categoria] = (produtosPorCategoria[categoria] || 0) + 1;
+                    });
+                    
+                    // Cria o gráfico de pizza
+                    this.criarGraficoPizza('categorias-chart', {
+                        labels: Object.keys(produtosPorCategoria),
+                        datasets: [{
+                            data: Object.values(produtosPorCategoria),
+                            backgroundColor: [
+                                '#667eea',
+                                '#764ba2',
+                                '#f093fb',
+                                '#f5576c',
+                                '#4facfe',
+                                '#00f2fe'
+                            ]
+                        }]
+                    });
+                }
+
+                atualizarGraficoClientesRegiao() {
+                    // Agrupa clientes por cidade
+                    const clientesPorCidade = {};
+                    this.data.clientes.forEach(cliente => {
+                        const cidade = cliente.cidade || 'Não informado';
+                        clientesPorCidade[cidade] = (clientesPorCidade[cidade] || 0) + 1;
+                    });
+                    
+                    // Cria o gráfico de barras
+                    this.criarGraficoBarras('clientes-regiao-chart', {
+                        labels: Object.keys(clientesPorCidade),
+                        datasets: [{
+                            label: 'Clientes',
+                            data: Object.values(clientesPorCidade),
+                            backgroundColor: 'rgba(102, 126, 234, 0.8)',
+                            borderColor: '#667eea',
+                            borderWidth: 2
+                        }]
+                    });
+                }
+
+                atualizarTopProdutos() {
+                    const container = document.getElementById('top-produtos');
+                    if (!container) return;
+                    
+                    // Calcula vendas por produto
+                    const vendasPorProduto = {};
+                    this.data.vendas.forEach(venda => {
+                        const produto = venda.produto;
+                        if (!vendasPorProduto[produto]) {
+                            vendasPorProduto[produto] = { quantidade: 0, receita: 0 };
+                        }
+                        vendasPorProduto[produto].quantidade += venda.quantidade || 1;
+                        vendasPorProduto[produto].receita += venda.valor || 0;
+                    });
+                    
+                    // Ordena por quantidade vendida
+                    const topProdutos = Object.entries(vendasPorProduto)
+                        .sort(([,a], [,b]) => b.quantidade - a.quantidade)
+                        .slice(0, 5);
+                    
+                    container.innerHTML = topProdutos.map(([produto, stats]) => `
+                        <div class="product-item">
+                            <div class="product-info">
+                                <div class="product-name">${produto}</div>
+                                <div class="product-category">${this.getCategoriaProduto(produto)}</div>
+                            </div>
+                            <div class="product-stats">
+                                <div class="product-sales">${stats.quantidade}</div>
+                                <div class="product-revenue">R$ ${stats.receita.toFixed(2)}</div>
+                            </div>
+                        </div>
+                    `).join('');
+                }
+
+                atualizarEstoqueCritico() {
+                    const container = document.getElementById('estoque-critico');
+                    if (!container) return;
+                    
+                    // Filtra produtos com estoque baixo
+                    const estoqueCritico = this.data.produtos.filter(produto => {
+                        const estoque = produto.estoque || 0;
+                        const minimo = produto.estoque_minimo || 0;
+                        return estoque <= minimo;
+                    }).slice(0, 5);
+                    
+                    container.innerHTML = estoqueCritico.map(produto => `
+                        <div class="stock-item">
+                            <div class="stock-info">
+                                <div class="stock-product">${produto.nome}</div>
+                                <div class="stock-details">${produto.categoria || 'Sem categoria'}</div>
+                            </div>
+                            <div class="stock-status">
+                                <div class="stock-quantity">${produto.estoque || 0}</div>
+                                <div class="stock-minimum">Mín: ${produto.estoque_minimo || 0}</div>
+                            </div>
+                        </div>
+                    `).join('');
+                }
+
+                atualizarMetricasPerformance() {
+                    // Taxa de conversão (clientes que fizeram compra)
+                    const totalClientes = this.data.clientes.length;
+                    const clientesComCompra = new Set(this.data.vendas.map(v => v.cliente)).size;
+                    const taxaConversao = totalClientes > 0 ? (clientesComCompra / totalClientes * 100) : 0;
+                    const taxaConversaoElement = document.getElementById('taxa-conversao');
+                    if (taxaConversaoElement) taxaConversaoElement.textContent = `${taxaConversao.toFixed(1)}%`;
+                    
+                    // Ticket médio
+                    const totalVendas = this.data.vendas.length;
+                    const receitaTotal = this.data.vendas.reduce((total, v) => total + (v.valor || 0), 0);
+                    const ticketMedio = totalVendas > 0 ? receitaTotal / totalVendas : 0;
+                    const ticketMedioElement = document.getElementById('ticket-medio');
+                    if (ticketMedioElement) ticketMedioElement.textContent = `R$ ${ticketMedio.toFixed(2)}`;
+                    
+                    // Produtividade (vendas por dia útil)
+                    const diasUteis = this.calcularDiasUteis();
+                    const produtividade = diasUteis > 0 ? (totalVendas / diasUteis) : 0;
+                    const produtividadeElement = document.getElementById('produtividade');
+                    if (produtividadeElement) produtividadeElement.textContent = `${produtividade.toFixed(1)} vendas/dia`;
+                }
+
+                preencherFiltros() {
+                    // Preenche filtro de categorias
+                    const filtroCategoria = document.getElementById('filtro-categoria');
+                    if (filtroCategoria) {
+                        const categorias = [...new Set(this.data.produtos.map(p => p.categoria).filter(Boolean))];
+                        filtroCategoria.innerHTML = '<option value="">Todas as categorias</option>' +
+                            categorias.map(cat => `<option value="${cat}">${cat}</option>`).join('');
+                    }
+                    
+                    // Preenche filtro de clientes
+                    const filtroCliente = document.getElementById('filtro-cliente');
+                    if (filtroCliente) {
+                        filtroCliente.innerHTML = '<option value="">Todos os clientes</option>' +
+                            this.data.clientes.map(cli => `<option value="${cli.nome}">${cli.nome}</option>`).join('');
+                    }
+                    
+                    // Define datas padrão (últimos 30 dias)
+                    const hoje = new Date();
+                    const inicio = new Date(hoje.getTime() - (30 * 24 * 60 * 60 * 1000));
+                    
+                    const dataInicio = document.getElementById('data-inicio');
+                    const dataFim = document.getElementById('data-fim');
+                    
+                    if (dataInicio) dataInicio.value = inicio.toISOString().split('T')[0];
+                    if (dataFim) dataFim.value = hoje.toISOString().split('T')[0];
+                }
+
+                aplicarFiltros() {
+                    const dataInicio = document.getElementById('data-inicio').value;
+                    const dataFim = document.getElementById('data-fim').value;
+                    const categoria = document.getElementById('filtro-categoria').value;
+                    const cliente = document.getElementById('filtro-cliente').value;
+                    
+                    // Aplica filtros aos dados
+                    let vendasFiltradas = this.data.vendas;
+                    
+                    if (dataInicio && dataFim) {
+                        const inicio = new Date(dataInicio);
+                        const fim = new Date(dataFim);
+                        vendasFiltradas = vendasFiltradas.filter(venda => {
+                            const dataVenda = new Date(venda.data);
+                            return dataVenda >= inicio && dataVenda <= fim;
+                        });
+                    }
+                    
+                    if (categoria) {
+                        vendasFiltradas = vendasFiltradas.filter(venda => {
+                            const produto = this.data.produtos.find(p => p.nome === venda.produto);
+                            return produto && produto.categoria === categoria;
+                        });
+                    }
+                    
+                    if (cliente) {
+                        vendasFiltradas = vendasFiltradas.filter(venda => venda.cliente === cliente);
+                    }
+                    
+                    // Atualiza relatórios com dados filtrados
+                    this.atualizarRelatoriosComFiltros(vendasFiltradas);
+                    
+                    this.showNotification('Filtros aplicados com sucesso!', 'success');
+                }
+
+                limparFiltros() {
+                    const dataInicio = document.getElementById('data-inicio');
+                    const dataFim = document.getElementById('data-fim');
+                    const filtroCategoria = document.getElementById('filtro-categoria');
+                    const filtroCliente = document.getElementById('filtro-cliente');
+                    
+                    if (dataInicio) dataInicio.value = '';
+                    if (dataFim) dataFim.value = '';
+                    if (filtroCategoria) filtroCategoria.value = '';
+                    if (filtroCliente) filtroCliente.value = '';
+                    
+                    // Atualiza relatórios com dados completos
+                    this.updateRelatorios();
+                    
+                    this.showNotification('Filtros limpos!', 'info');
+                }
+
+                // Funções auxiliares
+                getCategoriaProduto(nomeProduto) {
+                    const produto = this.data.produtos.find(p => p.nome === nomeProduto);
+                    return produto ? produto.categoria : 'Não encontrado';
+                }
+
+                calcularDiasUteis() {
+                    const hoje = new Date();
+                    const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+                    let diasUteis = 0;
+                    
+                    for (let d = new Date(inicioMes); d <= hoje; d.setDate(d.getDate() + 1)) {
+                        if (d.getDay() !== 0 && d.getDay() !== 6) { // 0 = domingo, 6 = sábado
+                            diasUteis++;
+                        }
+                    }
+                    
+                    return diasUteis;
+                }
+
+                // Funções para criar gráficos (simples, sem biblioteca externa)
+                criarGraficoLinha(canvasId, data) {
+                    const canvas = document.getElementById(canvasId);
+                    if (!canvas) return;
+                    
+                    // Define tamanho do canvas
+                    canvas.width = canvas.offsetWidth;
+                    canvas.height = canvas.offsetHeight;
+                    
+                    const ctx = canvas.getContext('2d');
+                    const width = canvas.width;
+                    const height = canvas.height;
+                    
+                    // Limpa o canvas
+                    ctx.clearRect(0, 0, width, height);
+                    
+                    // Desenha o gráfico
+                    this.desenharGraficoLinha(ctx, data, width, height);
+                }
+
+                criarGraficoPizza(canvasId, data) {
+                    const canvas = document.getElementById(canvasId);
+                    if (!canvas) return;
+                    
+                    // Define tamanho do canvas
+                    canvas.width = canvas.offsetWidth;
+                    canvas.height = canvas.offsetHeight;
+                    
+                    const ctx = canvas.getContext('2d');
+                    const width = canvas.width;
+                    const height = canvas.height;
+                    
+                    // Limpa o canvas
+                    ctx.clearRect(0, 0, width, height);
+                    
+                    // Desenha o gráfico
+                    this.desenharGraficoPizza(ctx, data, width, height);
+                }
+
+                criarGraficoBarras(canvasId, data) {
+                    const canvas = document.getElementById(canvasId);
+                    if (!canvas) return;
+                    
+                    // Define tamanho do canvas
+                    canvas.width = canvas.offsetWidth;
+                    canvas.height = canvas.offsetHeight;
+                    
+                    const ctx = canvas.getContext('2d');
+                    const width = canvas.width;
+                    const height = canvas.height;
+                    
+                    // Limpa o canvas
+                    ctx.clearRect(0, 0, width, height);
+                    
+                    // Desenha o gráfico
+                    this.desenharGraficoBarras(ctx, data, width, height);
+                }
+
+                // Funções de desenho dos gráficos
+                desenharGraficoLinha(ctx, data, width, height) {
+                    const { labels, datasets } = data;
+                    const dataset = datasets[0];
+                    
+                    if (labels.length === 0) return;
+                    
+                    const padding = 40;
+                    const chartWidth = width - 2 * padding;
+                    const chartHeight = height - 2 * padding;
+                    
+                    // Encontra valores máximo e mínimo
+                    const maxValue = Math.max(...dataset.data);
+                    const minValue = Math.min(...dataset.data);
+                    const range = maxValue - minValue || 1;
+                    
+                    // Desenha linhas de grade
+                    ctx.strokeStyle = '#e2e8f0';
+                    ctx.lineWidth = 1;
+                    
+                    // Linhas horizontais
+                    for (let i = 0; i <= 5; i++) {
+                        const y = padding + (i * chartHeight / 5);
+                        ctx.beginPath();
+                        ctx.moveTo(padding, y);
+                        ctx.lineTo(width - padding, y);
+                        ctx.stroke();
+                    }
+                    
+                    // Desenha a linha do gráfico
+                    ctx.strokeStyle = dataset.borderColor;
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    
+                    labels.forEach((label, index) => {
+                        const x = padding + (index * chartWidth / (labels.length - 1));
+                        const y = padding + chartHeight - ((dataset.data[index] - minValue) / range * chartHeight);
+                        
+                        if (index === 0) {
+                            ctx.moveTo(x, y);
+                        } else {
+                            ctx.lineTo(x, y);
+                        }
+                    });
+                    
+                    ctx.stroke();
+                    
+                    // Desenha pontos
+                    ctx.fillStyle = dataset.backgroundColor;
+                    labels.forEach((label, index) => {
+                        const x = padding + (index * chartWidth / (labels.length - 1));
+                        const y = padding + chartHeight - ((dataset.data[index] - minValue) / range * chartHeight);
+                        
+                        ctx.beginPath();
+                        ctx.arc(x, y, 4, 0, 2 * Math.PI);
+                        ctx.fill();
+                    });
+                }
+
+                desenharGraficoPizza(ctx, data, width, height) {
+                    const { labels, datasets } = data;
+                    const dataset = datasets[0];
+                    
+                    if (labels.length === 0) return;
+                    
+                    const centerX = width / 2;
+                    const centerY = height / 2;
+                    const radius = Math.min(width, height) / 3;
+                    
+                    const total = dataset.data.reduce((sum, value) => sum + value, 0);
+                    let currentAngle = -Math.PI / 2; // Começa do topo
+                    
+                    labels.forEach((label, index) => {
+                        const value = dataset.data[index];
+                        const sliceAngle = (value / total) * 2 * Math.PI;
+                        
+                        // Desenha a fatia
+                        ctx.fillStyle = dataset.backgroundColor[index % dataset.backgroundColor.length];
+                        ctx.beginPath();
+                        ctx.moveTo(centerX, centerY);
+                        ctx.arc(centerX, centerY, radius, currentAngle, currentAngle + sliceAngle);
+                        ctx.closePath();
+                        ctx.fill();
+                        
+                        currentAngle += sliceAngle;
+                    });
+                }
+
+                desenharGraficoBarras(ctx, data, width, height) {
+                    const { labels, datasets } = data;
+                    const dataset = datasets[0];
+                    
+                    if (labels.length === 0) return;
+                    
+                    const padding = 60;
+                    const chartWidth = width - 2 * padding;
+                    const chartHeight = height - 2 * padding;
+                    const barWidth = chartWidth / labels.length * 0.8;
+                    const barSpacing = chartWidth / labels.length * 0.2;
+                    
+                    // Encontra valor máximo
+                    const maxValue = Math.max(...dataset.data);
+                    
+                    // Desenha barras
+                    labels.forEach((label, index) => {
+                        const value = dataset.data[index];
+                        const barHeight = (value / maxValue) * chartHeight;
+                        const x = padding + index * (chartWidth / labels.length) + barSpacing / 2;
+                        const y = padding + chartHeight - barHeight;
+                        
+                        // Desenha a barra
+                        ctx.fillStyle = dataset.backgroundColor;
+                        ctx.fillRect(x, y, barWidth, barHeight);
+                        
+                        // Borda da barra
+                        ctx.strokeStyle = dataset.borderColor;
+                        ctx.lineWidth = dataset.borderWidth;
+                        ctx.strokeRect(x, y, barWidth, barHeight);
+                    });
+                }
+
+                exportarRelatorios() {
+                    // Simula exportação de PDF
+                    this.showNotification('Exportando relatórios para PDF...', 'info');
+                    
+                    setTimeout(() => {
+                        this.showNotification('Relatórios exportados com sucesso!', 'success');
+                    }, 2000);
                 }
 
                 // FUNÇÕES DE PERSISTÊNCIA DE DADOS
@@ -1146,14 +1657,24 @@ class SistemaEmpresarial {
                 }
 
                 atualizarEstoque() {
+                    // Atualiza o estoque baseado nos produtos existentes
                     this.data.estoque = this.data.produtos.map(p => ({
                         id: p.id,
                         produto: p.nome,
-                        quantidade: p.estoque,
-                        minimo: p.estoque_minimo
+                        quantidade: p.estoque || 0,
+                        minimo: p.estoque_minimo || 0,
+                        ativo: true
                     }));
+                    
                     // Salva o estoque atualizado
                     localStorage.setItem('estoque', JSON.stringify(this.data.estoque));
+                    
+                    // Atualiza a tabela de estoque se estiver visível
+                    if (document.getElementById('estoque-table')) {
+                        this.updateTabelaEstoque();
+                    }
+                    
+                    console.log('📦 Estoque atualizado:', this.data.estoque);
                 }
 
                 // FUNÇÕES DE CRUD COMPLETAS

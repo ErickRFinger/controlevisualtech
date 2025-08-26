@@ -1910,3 +1910,360 @@ tbody tr:hover {
     color: #ffff00;
     filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.8));
 }
+
+/* ============================================================================
+   TELA DE RELATÓRIOS
+   ============================================================================ */
+
+.reports-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+    gap: 25px;
+    margin-bottom: 40px;
+}
+
+.report-card {
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 20px;
+    padding: 25px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    transition: all 0.3s ease;
+}
+
+.report-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 15px 40px rgba(0, 0, 0, 0.15);
+}
+
+.report-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    padding-bottom: 15px;
+    border-bottom: 2px solid rgba(102, 126, 234, 0.1);
+}
+
+.report-header h3 {
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: #2d3748;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0;
+}
+
+.report-header h3 i {
+    color: #667eea;
+    font-size: 1.1rem;
+}
+
+.period-selector select {
+    padding: 8px 12px;
+    border: 2px solid #e2e8f0;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    background: white;
+    color: #2d3748;
+    transition: all 0.3s ease;
+}
+
+.period-selector select:focus {
+    outline: none;
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.chart-container {
+    height: 300px;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.chart-container canvas {
+    max-width: 100%;
+    max-height: 100%;
+}
+
+.top-products-list,
+.critical-stock-list {
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.product-item,
+.stock-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 0;
+    border-bottom: 1px solid rgba(102, 126, 234, 0.1);
+    transition: all 0.3s ease;
+}
+
+.product-item:hover,
+.stock-item:hover {
+    background: rgba(102, 126, 234, 0.05);
+    padding-left: 10px;
+    padding-right: 10px;
+    border-radius: 8px;
+}
+
+.product-item:last-child,
+.stock-item:last-child {
+    border-bottom: none;
+}
+
+.product-info,
+.stock-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.product-name,
+.stock-product {
+    font-weight: 600;
+    color: #2d3748;
+    font-size: 0.95rem;
+}
+
+.product-category,
+.stock-details {
+    font-size: 0.85rem;
+    color: #64748b;
+}
+
+.product-stats,
+.stock-status {
+    text-align: right;
+}
+
+.product-sales,
+.stock-quantity {
+    font-weight: 700;
+    color: #667eea;
+    font-size: 1.1rem;
+}
+
+.product-revenue,
+.stock-minimum {
+    font-size: 0.8rem;
+    color: #94a3b8;
+}
+
+.performance-metrics {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.metric-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px;
+    background: rgba(102, 126, 234, 0.05);
+    border-radius: 12px;
+    border: 1px solid rgba(102, 126, 234, 0.1);
+}
+
+.metric-label {
+    font-weight: 500;
+    color: #64748b;
+    font-size: 0.9rem;
+}
+
+.metric-value {
+    font-weight: 700;
+    color: #667eea;
+    font-size: 1.1rem;
+}
+
+.filters-section {
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 20px;
+    padding: 25px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.filters-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 20px;
+    align-items: end;
+}
+
+.filter-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.filter-group label {
+    font-weight: 600;
+    color: #2d3748;
+    font-size: 0.9rem;
+}
+
+.date-inputs {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.date-inputs span {
+    color: #64748b;
+    font-size: 0.9rem;
+}
+
+.date-inputs input {
+    flex: 1;
+}
+
+/* Responsividade para relatórios */
+@media (max-width: 768px) {
+    .reports-grid {
+        grid-template-columns: 1fr;
+        gap: 20px;
+    }
+    
+    .report-card {
+        padding: 20px;
+    }
+    
+    .chart-container {
+        height: 250px;
+    }
+    
+    .filters-grid {
+        grid-template-columns: 1fr;
+        gap: 15px;
+    }
+    
+    .date-inputs {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+    }
+    
+    .date-inputs span {
+        text-align: center;
+    }
+}
+
+@media (max-width: 480px) {
+    .report-header {
+        flex-direction: column;
+        gap: 15px;
+        align-items: flex-start;
+    }
+    
+    .period-selector select {
+        width: 100%;
+    }
+    
+    .chart-container {
+        height: 200px;
+    }
+}
+
+/* TEMA ESCURO PARA RELATÓRIOS */
+.dark-theme .report-card {
+    background: rgba(0, 0, 0, 0.95);
+    border: 1px solid rgba(255, 255, 0, 0.4);
+    box-shadow: 0 8px 32px rgba(255, 255, 0, 0.1);
+}
+
+.dark-theme .report-header h3 {
+    color: #ffff00;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8), 0 0 15px rgba(255, 255, 0, 0.2);
+}
+
+.dark-theme .report-header h3 i {
+    color: #ffff00;
+    filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.8));
+}
+
+.dark-theme .period-selector select {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 0, 0.3);
+    color: #ffffcc;
+}
+
+.dark-theme .period-selector select:focus {
+    border-color: #ffff00;
+    box-shadow: 0 0 0 3px rgba(255, 255, 0, 0.1);
+}
+
+.dark-theme .product-item,
+.dark-theme .stock-item {
+    border-bottom-color: rgba(255, 255, 0, 0.3);
+}
+
+.dark-theme .product-item:hover,
+.dark-theme .stock-item:hover {
+    background: rgba(255, 255, 0, 0.1);
+}
+
+.dark-theme .product-name,
+.dark-theme .stock-product {
+    color: #ffffcc;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+.dark-theme .product-category,
+.dark-theme .stock-details {
+    color: #cccccc;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+.dark-theme .product-sales,
+.dark-theme .stock-quantity {
+    color: #ffff00;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+.dark-theme .product-revenue,
+.dark-theme .stock-minimum {
+    color: #ffffcc;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+.dark-theme .metric-item {
+    background: rgba(255, 255, 0, 0.1);
+    border-color: rgba(255, 255, 0, 0.3);
+}
+
+.dark-theme .metric-label {
+    color: #ffffcc;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+.dark-theme .metric-value {
+    color: #ffff00;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+.dark-theme .filters-section {
+    background: rgba(0, 0, 0, 0.95);
+    border: 1px solid rgba(255, 255, 0, 0.4);
+    box-shadow: 0 8px 32px rgba(255, 255, 0, 0.1);
+}
+
+.dark-theme .filter-group label {
+    color: #ffffcc;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+.dark-theme .date-inputs span {
+    color: #ffffcc;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}

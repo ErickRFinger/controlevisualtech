@@ -306,49 +306,172 @@
             <!-- RELATÓRIOS -->
             <section id="relatorios" class="section">
                 <div class="section-header">
-                    <h2><i class="fas fa-chart-bar"></i> Relatórios</h2>
+                    <h2><i class="fas fa-chart-bar"></i> Relatórios e Análises</h2>
                     <div class="section-actions">
-                        <button class="btn btn-primary">
-                            <i class="fas fa-download"></i> Exportar
+                        <button class="btn btn-success" onclick="window.sistema.exportarRelatorios()">
+                            <i class="fas fa-download"></i> Exportar PDF
+                        </button>
+                        <button class="btn btn-info" onclick="window.sistema.atualizarRelatorios()">
+                            <i class="fas fa-sync-alt"></i> Atualizar
                         </button>
                     </div>
                 </div>
 
+                <!-- Resumo Executivo -->
                 <div class="dashboard-grid">
                     <div class="card">
                         <div class="card-icon">
                             <i class="fas fa-chart-line"></i>
                         </div>
-                        <h3>Vendas por Período</h3>
-                        <div class="number">Em desenvolvimento</div>
-                        <div class="label">Relatório de vendas</div>
+                        <h3>Total de Vendas</h3>
+                        <div class="number" id="total-vendas">0</div>
+                        <div class="label">Este mês</div>
                     </div>
 
                     <div class="card">
                         <div class="card-icon">
-                            <i class="fas fa-chart-pie"></i>
+                            <i class="fas fa-dollar-sign"></i>
                         </div>
-                        <h3>Produtos Mais Vendidos</h3>
-                        <div class="number">Em desenvolvimento</div>
-                        <div class="label">Top produtos</div>
+                        <h3>Receita Total</h3>
+                        <div class="number" id="receita-total">R$ 0,00</div>
+                        <div class="label">Este mês</div>
                     </div>
 
                     <div class="card">
                         <div class="card-icon">
-                            <i class="fas fa-chart-area"></i>
+                            <i class="fas fa-users"></i>
                         </div>
-                        <h3>Estoque por Categoria</h3>
-                        <div class="number">Em desenvolvimento</div>
-                        <div class="label">Distribuição</div>
+                        <h3>Clientes Ativos</h3>
+                        <div class="number" id="clientes-ativos">0</div>
+                        <div class="label">Total cadastrado</div>
                     </div>
 
                     <div class="card">
                         <div class="card-icon">
-                            <i class="fas fa-chart-bar"></i>
+                            <i class="fas fa-boxes"></i>
                         </div>
-                        <h3>Clientes por Região</h3>
-                        <div class="number">Em desenvolvimento</div>
-                        <div class="label">Distribuição geográfica</div>
+                        <h3>Produtos em Estoque</h3>
+                        <div class="number" id="produtos-estoque">0</div>
+                        <div class="label">Itens disponíveis</div>
+                    </div>
+                </div>
+
+                <!-- Gráficos e Análises -->
+                <div class="reports-grid">
+                    <!-- Gráfico de Vendas por Período -->
+                    <div class="report-card">
+                        <div class="report-header">
+                            <h3><i class="fas fa-chart-line"></i> Vendas por Período</h3>
+                            <div class="period-selector">
+                                <select id="vendas-periodo" onchange="window.sistema.atualizarGraficoVendas()">
+                                    <option value="7">Últimos 7 dias</option>
+                                    <option value="30" selected>Últimos 30 dias</option>
+                                    <option value="90">Últimos 3 meses</option>
+                                    <option value="365">Último ano</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="vendas-chart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Gráfico de Produtos por Categoria -->
+                    <div class="report-card">
+                        <div class="report-header">
+                            <h3><i class="fas fa-chart-pie"></i> Produtos por Categoria</h3>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="categorias-chart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Top Produtos Vendidos -->
+                    <div class="report-card">
+                        <div class="report-header">
+                            <h3><i class="fas fa-trophy"></i> Top Produtos Vendidos</h3>
+                        </div>
+                        <div class="top-products-list" id="top-produtos">
+                            <!-- Lista será preenchida dinamicamente -->
+                        </div>
+                    </div>
+
+                    <!-- Estoque Crítico -->
+                    <div class="report-card">
+                        <div class="report-header">
+                            <h3><i class="fas fa-exclamation-triangle"></i> Estoque Crítico</h3>
+                        </div>
+                        <div class="critical-stock-list" id="estoque-critico">
+                            <!-- Lista será preenchida dinamicamente -->
+                        </div>
+                    </div>
+
+                    <!-- Análise de Clientes -->
+                    <div class="report-card">
+                        <div class="report-header">
+                            <h3><i class="fas fa-map-marker-alt"></i> Clientes por Região</h3>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="clientes-regiao-chart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Relatório de Performance -->
+                    <div class="report-card">
+                        <div class="report-header">
+                            <h3><i class="fas fa-tachometer-alt"></i> Performance Geral</h3>
+                        </div>
+                        <div class="performance-metrics">
+                            <div class="metric-item">
+                                <span class="metric-label">Taxa de Conversão</span>
+                                <span class="metric-value" id="taxa-conversao">0%</span>
+                            </div>
+                            <div class="metric-item">
+                                <span class="metric-label">Ticket Médio</span>
+                                <span class="metric-value" id="ticket-medio">R$ 0,00</span>
+                            </div>
+                            <div class="metric-item">
+                                <span class="metric-label">Produtividade</span>
+                                <span class="metric-value" id="produtividade">0%</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Filtros Avançados -->
+                <div class="filters-section">
+                    <div class="section-header">
+                        <h3><i class="fas fa-filter"></i> Filtros Avançados</h3>
+                    </div>
+                    <div class="filters-grid">
+                        <div class="filter-group">
+                            <label>Período de Análise</label>
+                            <div class="date-inputs">
+                                <input type="date" id="data-inicio" class="form-control">
+                                <span>até</span>
+                                <input type="date" id="data-fim" class="form-control">
+                            </div>
+                        </div>
+                        <div class="filter-group">
+                            <label>Categoria</label>
+                            <select id="filtro-categoria" class="form-control">
+                                <option value="">Todas as categorias</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label>Cliente</label>
+                            <select id="filtro-cliente" class="form-control">
+                                <option value="">Todos os clientes</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <button class="btn btn-primary" onclick="window.sistema.aplicarFiltros()">
+                                <i class="fas fa-search"></i> Aplicar Filtros
+                            </button>
+                            <button class="btn btn-secondary" onclick="window.sistema.limparFiltros()">
+                                <i class="fas fa-times"></i> Limpar
+                            </button>
+                        </div>
                     </div>
                 </div>
             </section>
