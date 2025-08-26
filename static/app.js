@@ -232,58 +232,86 @@ class SistemaEmpresarial {
             if (this.isConnected && this.supabase) {
                 console.log('🔍 Buscando dados de estoque no Supabase...');
                 
-                // Primeiro, tenta buscar da tabela estoque
-                let { data, error } = await this.supabase
+                // Busca diretamente da tabela estoque
+                const { data, error } = await this.supabase
                     .from('estoque')
                     .select(`
                         *,
                         produtos(nome, preco)
-                    `)
-                    .eq('ativo', true);
+                    `);
                 
                 if (error) {
-                    console.warn('⚠️ Erro ao buscar tabela estoque:', error);
-                    // Se não conseguir buscar da tabela estoque, tenta buscar dos produtos
-                    const { data: produtosData, error: produtosError } = await this.supabase
-                        .from('produtos')
-                        .select('*')
-                        .eq('ativo', true);
-                    
-                    if (produtosError) throw produtosError;
-                    
-                    // Cria estoque baseado nos produtos
-                    this.data.estoque = (produtosData || []).map(produto => ({
-                        id: produto.id,
-                        produto: produto.nome || produto.descricao || 'Produto sem nome',
-                        quantidade: produto.estoque || produto.quantidade || 0,
-                        minimo: produto.estoque_minimo || produto.quantidade_minima || 0,
-                        ativo: produto.ativo || true
-                    }));
-                    
-                    console.log(`📦 ${this.data.estoque.length} itens de estoque criados a partir dos produtos do Supabase`);
-                } else {
-                    // Processa os dados da tabela estoque
-                    this.data.estoque = (data || []).map(item => ({
-                        id: item.id,
-                        produto: item.produtos?.nome || item.produto || 'Produto não encontrado',
-                        quantidade: item.quantidade || 0,
-                        minimo: item.minimo || item.quantidade_minima || 0,
-                        ativo: item.ativo || true
-                    }));
-                    
-                    console.log(`📦 ${this.data.estoque.length} itens de estoque carregados da tabela estoque do Supabase`);
+                    console.error('❌ Erro ao buscar estoque:', error);
+                    throw error;
                 }
                 
-                // Salva no localStorage para backup
-                localStorage.setItem('estoque', JSON.stringify(this.data.estoque));
+                if (data && data.length > 0) {
+                    console.log('✅ Dados de estoque carregados do Supabase:', data);
+                    
+                    // Mapeia os dados do Supabase para o formato do sistema
+                    this.data.estoque = data.map(item => ({
+                        id: item.id,
+                        produto: item.produtos?.nome || 'Produto não encontrado',
+                        quantidade: item.quantidade || 0,
+                        minimo: item.minimo || item.quantidade_minima || 0,
+                        ativo: item.ativo !== false, // true por padrão se não especificado
+                        preco: item.produtos?.preco || 0
+                    }));
+                    
+                    console.log('📦 Estoque mapeado:', this.data.estoque);
+                    
+                    // Salva no localStorage como backup
+                    localStorage.setItem('estoque', JSON.stringify(this.data.estoque));
+                    
+                } else {
+                    console.warn('⚠️ Nenhum dado encontrado na tabela estoque');
+                    // Se não há dados na tabela estoque, tenta buscar dos produtos
+                    await this.carregarEstoqueDosProdutos();
+                }
                 
             } else {
-                console.warn('⚠️ Supabase não disponível, usando dados locais');
+                console.warn('⚠️ Supabase não disponível, carregando dados locais...');
                 this.loadDadosLocais();
             }
+            
         } catch (error) {
-            console.error('❌ Erro ao carregar estoque do Supabase:', error);
+            console.error('❌ Erro ao carregar estoque:', error);
             // Em caso de erro, tenta carregar dados locais
+            this.loadDadosLocais();
+        }
+    }
+
+    // Função para carregar estoque baseado nos produtos quando não há tabela estoque
+    async carregarEstoqueDosProdutos() {
+        try {
+            console.log('🔄 Carregando estoque baseado nos produtos...');
+            
+            const { data: produtosData, error } = await this.supabase
+                .from('produtos')
+                .select('*');
+            
+            if (error) {
+                console.error('❌ Erro ao buscar produtos:', error);
+                throw error;
+            }
+            
+            if (produtosData && produtosData.length > 0) {
+                // Cria estoque baseado nos produtos
+                this.data.estoque = produtosData.map(p => ({
+                    id: p.id,
+                    produto: p.nome,
+                    quantidade: p.estoque || p.quantidade || 0,
+                    minimo: p.estoque_minimo || p.minimo || 0,
+                    ativo: true,
+                    preco: p.preco || 0
+                }));
+                
+                console.log('📦 Estoque criado a partir dos produtos:', this.data.estoque);
+                localStorage.setItem('estoque', JSON.stringify(this.data.estoque));
+            }
+            
+        } catch (error) {
+            console.error('❌ Erro ao carregar estoque dos produtos:', error);
             this.loadDadosLocais();
         }
     }
@@ -1032,6 +1060,9 @@ class SistemaEmpresarial {
         
         tbody.innerHTML = '';
         
+        console.log('📦 Atualizando tabela de estoque...');
+        console.log('📦 Dados de estoque disponíveis:', this.data.estoque);
+        
         // Se não há dados de estoque, tenta recarregar do Supabase primeiro
         if (this.data.estoque.length === 0) {
             console.log('📦 Nenhum dado de estoque encontrado, tentando recarregar...');
@@ -1042,34 +1073,36 @@ class SistemaEmpresarial {
                     this.updateTabelaEstoque();
                 }).catch(() => {
                     // Se falhar, mostra mensagem de erro
-                    this.showEmptyEstoqueMessage(tbody);
+                    this.showNotification('Erro ao carregar dados do estoque!', 'error');
                 });
-                return;
-            } else {
-                // Se não estiver conectado ao Supabase, usa dados locais
-                this.atualizarEstoque();
             }
-        }
-        
-        if (this.data.estoque.length === 0) {
-            this.showEmptyEstoqueMessage(tbody);
             return;
         }
         
-        this.data.estoque.forEach(item => {
+        // Renderiza cada item do estoque
+        this.data.estoque.forEach((item, index) => {
             const row = document.createElement('tr');
             row.setAttribute('data-id', item.id);
             
-            // Calcula o status do estoque
+            // Garante que as quantidades sejam números
             const quantidade = parseInt(item.quantidade) || 0;
             const minimo = parseInt(item.minimo) || 0;
+            
+            console.log(`📦 Renderizando item ${index + 1}:`, {
+                produto: item.produto,
+                quantidade: quantidade,
+                minimo: minimo,
+                tipo: typeof item.quantidade
+            });
+            
+            // Calcula o status do estoque
             const status = quantidade > minimo ? 'success' : 'warning';
             const statusText = quantidade > minimo ? 'OK' : 'Baixo';
             
             row.innerHTML = `
                 <td>${item.produto || 'N/A'}</td>
-                <td>${quantidade}</td>
-                <td>${minimo}</td>
+                <td class="quantidade-cell">${quantidade}</td>
+                <td class="minimo-cell">${minimo}</td>
                 <td>
                     <span class="status-badge ${status}">
                         ${statusText}
@@ -1078,15 +1111,14 @@ class SistemaEmpresarial {
                 <td>${new Date().toLocaleDateString()}</td>
                 <td class="action-cell"></td>
             `;
+            
             tbody.appendChild(row);
         });
         
-        // Adiciona os botões de ação após criar todas as linhas
-        this.addActionButtonsToRows(tbody, [
-            { type: 'stock', icon: 'fas fa-boxes', class: 'btn-success', action: 'ajustarEstoque' }
-        ]);
+        // Adiciona botões de ação
+        this.addActionButtonsToRows('#estoque-table', 'estoque');
         
-        console.log('📦 Tabela de estoque atualizada:', this.data.estoque);
+        console.log('📦 Tabela de estoque atualizada com sucesso!');
     }
 
     showEmptyEstoqueMessage(tbody) {
@@ -2147,27 +2179,98 @@ class SistemaEmpresarial {
         }
     }
 
+    // Função para forçar recarga específica do estoque
+    async recarregarEstoque() {
+        if (!this.isConnected || !this.supabase) {
+            console.warn('⚠️ Supabase não disponível');
+            return false;
+        }
+        
+        try {
+            console.log('🔄 Recarregando estoque do Supabase...');
+            await this.loadEstoque();
+            
+            // Atualiza a tabela se estiver visível
+            if (document.getElementById('estoque-table')) {
+                this.updateTabelaEstoque();
+            }
+            
+            console.log('✅ Estoque recarregado com sucesso!');
+            return true;
+        } catch (error) {
+            console.error('❌ Erro ao recarregar estoque:', error);
+            return false;
+        }
+    }
+
     // Função para verificar se os dados estão sincronizados
     verificarSincronizacao() {
         const estoqueLocal = localStorage.getItem('estoque');
         const produtosLocal = localStorage.getItem('produtos');
+        
+        console.log('🔍 === VERIFICAÇÃO DE SINCRONIZAÇÃO ===');
         
         if (this.isConnected && this.supabase) {
             console.log('🔗 Status da conexão Supabase:', this.isConnected);
             console.log('📦 Dados de estoque carregados:', this.data.estoque.length);
             console.log('📦 Dados de produtos carregados:', this.data.produtos.length);
             
+            // Mostra detalhes dos primeiros itens para debug
+            if (this.data.estoque.length > 0) {
+                console.log('📦 Primeiro item de estoque:', this.data.estoque[0]);
+            }
+            if (this.data.produtos.length > 0) {
+                console.log('📦 Primeiro produto:', this.data.produtos[0]);
+            }
+            
             if (estoqueLocal) {
                 const estoqueLocalParsed = JSON.parse(estoqueLocal);
                 console.log('💾 Estoque no localStorage:', estoqueLocalParsed.length);
+                if (estoqueLocalParsed.length > 0) {
+                    console.log('💾 Primeiro item local:', estoqueLocalParsed[0]);
+                }
             }
             
             if (produtosLocal) {
                 const produtosLocalParsed = JSON.parse(produtosLocal);
                 console.log('💾 Produtos no localStorage:', produtosLocalParsed.length);
+                if (produtosLocalParsed.length > 0) {
+                    console.log('💾 Primeiro produto local:', produtosLocalParsed[0]);
+                }
             }
         } else {
             console.log('📱 Modo local ativo');
+        }
+        
+        console.log('🔍 === FIM DA VERIFICAÇÃO ===');
+    }
+
+    // Função para mostrar formulário de estoque
+    showFormEstoque() {
+        // Por enquanto, mostra uma notificação
+        this.showNotification('Funcionalidade de adicionar item em desenvolvimento!', 'info');
+    }
+
+    // Função para forçar recarga específica do estoque
+    async recarregarEstoque() {
+        try {
+            console.log('🔄 Forçando recarga do estoque...');
+            this.showNotification('Recarregando dados do Supabase...', 'info');
+            
+            // Limpa dados atuais
+            this.data.estoque = [];
+            
+            // Recarrega do Supabase
+            await this.loadEstoque();
+            
+            // Atualiza a tabela
+            this.updateTabelaEstoque();
+            
+            this.showNotification('Estoque recarregado com sucesso!', 'success');
+            
+        } catch (error) {
+            console.error('❌ Erro ao recarregar estoque:', error);
+            this.showNotification('Erro ao recarregar estoque!', 'error');
         }
     }
 }
