@@ -121,10 +121,13 @@
             <!-- PRODUTOS -->
             <section id="produtos" class="section">
                 <div class="section-header">
-                    <h2><i class="fas fa-box"></i> Produtos</h2>
+                    <h2><i class="fas fa-box"></i> Controle de Produtos</h2>
                     <div class="section-actions">
+                        <button class="btn btn-success" onclick="window.sistema.recarregarProdutos()">
+                            <i class="fas fa-sync-alt"></i> Recarregar do Supabase
+                        </button>
                         <button class="btn btn-primary" onclick="showModal('add-product-modal')">
-                            <i class="fas fa-plus"></i> Novo Produto
+                            <i class="fas fa-plus"></i> Adicionar Produto
                         </button>
                     </div>
                 </div>

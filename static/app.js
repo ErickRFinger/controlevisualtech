@@ -104,34 +104,52 @@ class SistemaEmpresarial {
     async loadProdutos() {
         try {
             if (this.isConnected && this.supabase) {
-                // Busca produtos com join na tabela de categorias
+                console.log('🔍 Buscando dados de produtos no Supabase...');
+                
+                // Busca diretamente da tabela produtos
                 const { data, error } = await this.supabase
                     .from('produtos')
-                    .select(`
-                        *,
-                        categorias(nome)
-                    `)
-                    .eq('ativo', true);
+                    .select('*');
                 
-                if (error) throw error;
+                if (error) {
+                    console.error('❌ Erro ao buscar produtos:', error);
+                    throw error;
+                }
                 
-                // Processa os dados para extrair o nome da categoria
-                this.data.produtos = (data || []).map(produto => ({
-                    ...produto,
-                    categoria: produto.categorias?.nome || produto.categoria || 'Sem categoria',
-                    estoque: produto.estoque || produto.quantidade || 0,
-                    estoque_minimo: produto.estoque_minimo || produto.quantidade_minima || 0,
-                    nome: produto.nome || produto.descricao || 'Produto sem nome'
-                }));
+                if (data && data.length > 0) {
+                    console.log('✅ Dados de produtos carregados do Supabase:', data);
+                    
+                    // Mapeia os dados do Supabase para o formato do sistema
+                    this.data.produtos = data.map(produto => ({
+                        id: produto.id,
+                        nome: produto.nome || produto.descricao || 'Produto sem nome',
+                        descricao: produto.descricao || produto.nome || 'Sem descrição',
+                        preco: produto.preco || 0,
+                        estoque: produto.estoque || produto.quantidade || 0,
+                        estoque_minimo: produto.estoque_minimo || produto.minimo || 0,
+                        categoria: produto.categoria || 'Sem categoria',
+                        ativo: produto.ativo !== false // true por padrão se não especificado
+                    }));
+                    
+                    console.log('📦 Produtos mapeados:', this.data.produtos);
+                    
+                    // Salva no localStorage como backup
+                    localStorage.setItem('produtos', JSON.stringify(this.data.produtos));
+                    
+                } else {
+                    console.warn('⚠️ Nenhum produto encontrado na tabela produtos');
+                    this.loadDadosLocais();
+                }
                 
-                console.log(`📦 ${this.data.produtos.length} produtos carregados do Supabase`);
             } else {
-                console.warn('⚠️ Supabase não disponível, usando dados locais');
+                console.warn('⚠️ Supabase não disponível, carregando dados locais...');
                 this.loadDadosLocais();
             }
+            
         } catch (error) {
             console.error('❌ Erro ao carregar produtos:', error);
-            this.data.produtos = [];
+            // Em caso de erro, tenta carregar dados locais
+            this.loadDadosLocais();
         }
     }
 
@@ -1007,51 +1025,68 @@ class SistemaEmpresarial {
         
         tbody.innerHTML = '';
         
+        console.log('📦 Atualizando tabela de produtos...');
+        console.log('📦 Dados de produtos disponíveis:', this.data.produtos);
+        
+        // Se não há dados de produtos, tenta recarregar do Supabase primeiro
         if (this.data.produtos.length === 0) {
-            tbody.innerHTML = `
-                <tr class="empty-row">
-                    <td colspan="7">
-                        <div class="empty-message">
-                            <div class="empty-state">
-                                <i class="fas fa-box"></i>
-                                <h4>Nenhum produto encontrado</h4>
-                                <p>Adicione seu primeiro produto para começar</p>
-                            </div>
-                        </div>
-                    </td>
-                </tr>
-            `;
+            console.log('📦 Nenhum produto encontrado, tentando recarregar...');
+            // Tenta recarregar do Supabase se estiver conectado
+            if (this.isConnected && this.supabase) {
+                this.loadProdutos().then(() => {
+                    // Recursivamente chama a função após carregar os dados
+                    this.updateTabelaProdutos();
+                }).catch(() => {
+                    // Se falhar, mostra mensagem de erro
+                    this.showNotification('Erro ao carregar dados dos produtos!', 'error');
+                });
+            }
             return;
         }
         
-        this.data.produtos.forEach(produto => {
+        // Renderiza cada produto
+        this.data.produtos.forEach((produto, index) => {
             const row = document.createElement('tr');
             row.setAttribute('data-id', produto.id);
+            
+            // Garante que os valores sejam números
+            const preco = parseFloat(produto.preco) || 0;
+            const estoque = parseInt(produto.estoque) || 0;
+            const estoqueMinimo = parseInt(produto.estoque_minimo) || 0;
+            
+            console.log(`📦 Renderizando produto ${index + 1}:`, {
+                nome: produto.nome,
+                categoria: produto.categoria,
+                preco: preco,
+                estoque: estoque,
+                estoque_minimo: estoqueMinimo
+            });
+            
+            // Calcula o status do estoque
+            const status = estoque > estoqueMinimo ? 'success' : 'warning';
+            const statusText = estoque > estoqueMinimo ? 'Disponível' : 'Baixo';
+            
             row.innerHTML = `
                 <td>${produto.nome || 'N/A'}</td>
                 <td>${produto.categoria || 'Sem categoria'}</td>
-                <td>R$ ${(produto.preco || 0).toFixed(2)}</td>
-                <td>${produto.estoque || 0}</td>
-                <td>${produto.estoque_minimo || 0}</td>
+                <td class="preco-cell">R$ ${preco.toFixed(2)}</td>
+                <td class="estoque-cell">${estoque}</td>
+                <td class="estoque-minimo-cell">${estoqueMinimo}</td>
                 <td>
-                    <span class="status-badge ${(produto.estoque || 0) > (produto.estoque_minimo || 0) ? 'success' : 'warning'}">
-                        ${(produto.estoque || 0) > (produto.estoque_minimo || 0) ? 'Disponível' : 'Baixo'}
+                    <span class="status-badge ${status}">
+                        ${statusText}
                     </span>
                 </td>
                 <td class="action-cell"></td>
             `;
+            
             tbody.appendChild(row);
         });
         
-        // Adiciona os botões de ação após criar todas as linhas
-        this.addActionButtonsToRows(tbody, [
-            { type: 'edit', icon: 'fas fa-edit', class: 'btn-warning', action: 'editarProduto' },
-            { type: 'stock', icon: 'fas fa-boxes', class: 'btn-success', action: 'ajustarEstoque' },
-            { type: 'sale', icon: 'fas fa-shopping-cart', class: 'btn-primary', action: 'vendaRapida' },
-            { type: 'delete', icon: 'fas fa-trash', class: 'btn-danger', action: 'excluirProduto' }
-        ]);
+        // Adiciona botões de ação
+        this.addActionButtonsToRows('#produtos-table', 'produtos');
         
-        console.log('📦 Tabela de produtos atualizada:', this.data.produtos);
+        console.log('📦 Tabela de produtos atualizada com sucesso!');
     }
 
     updateTabelaEstoque() {
@@ -2181,25 +2216,47 @@ class SistemaEmpresarial {
 
     // Função para forçar recarga específica do estoque
     async recarregarEstoque() {
-        if (!this.isConnected || !this.supabase) {
-            console.warn('⚠️ Supabase não disponível');
-            return false;
-        }
-        
         try {
-            console.log('🔄 Recarregando estoque do Supabase...');
+            console.log('🔄 Forçando recarga do estoque...');
+            this.showNotification('Recarregando dados do Supabase...', 'info');
+            
+            // Limpa dados atuais
+            this.data.estoque = [];
+            
+            // Recarrega do Supabase
             await this.loadEstoque();
             
-            // Atualiza a tabela se estiver visível
-            if (document.getElementById('estoque-table')) {
-                this.updateTabelaEstoque();
-            }
+            // Atualiza a tabela
+            this.updateTabelaEstoque();
             
-            console.log('✅ Estoque recarregado com sucesso!');
-            return true;
+            this.showNotification('Estoque recarregado com sucesso!', 'success');
+            
         } catch (error) {
             console.error('❌ Erro ao recarregar estoque:', error);
-            return false;
+            this.showNotification('Erro ao recarregar estoque!', 'error');
+        }
+    }
+
+    // Função para forçar recarga específica dos produtos
+    async recarregarProdutos() {
+        try {
+            console.log('🔄 Forçando recarga dos produtos...');
+            this.showNotification('Recarregando dados do Supabase...', 'info');
+            
+            // Limpa dados atuais
+            this.data.produtos = [];
+            
+            // Recarrega do Supabase
+            await this.loadProdutos();
+            
+            // Atualiza a tabela
+            this.updateTabelaProdutos();
+            
+            this.showNotification('Produtos recarregados com sucesso!', 'success');
+            
+        } catch (error) {
+            console.error('❌ Erro ao recarregar produtos:', error);
+            this.showNotification('Erro ao recarregar produtos!', 'error');
         }
     }
 
@@ -2249,29 +2306,6 @@ class SistemaEmpresarial {
     showFormEstoque() {
         // Por enquanto, mostra uma notificação
         this.showNotification('Funcionalidade de adicionar item em desenvolvimento!', 'info');
-    }
-
-    // Função para forçar recarga específica do estoque
-    async recarregarEstoque() {
-        try {
-            console.log('🔄 Forçando recarga do estoque...');
-            this.showNotification('Recarregando dados do Supabase...', 'info');
-            
-            // Limpa dados atuais
-            this.data.estoque = [];
-            
-            // Recarrega do Supabase
-            await this.loadEstoque();
-            
-            // Atualiza a tabela
-            this.updateTabelaEstoque();
-            
-            this.showNotification('Estoque recarregado com sucesso!', 'success');
-            
-        } catch (error) {
-            console.error('❌ Erro ao recarregar estoque:', error);
-            this.showNotification('Erro ao recarregar estoque!', 'error');
-        }
     }
 }
 
