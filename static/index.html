@@ -276,6 +276,9 @@
                 <div class="section-header">
                     <h2><i class="fas fa-tags"></i> Categorias</h2>
                     <div class="section-actions">
+                        <button class="btn btn-info" onclick="window.sistema.testarCategorias()">
+                            <i class="fas fa-bug"></i> Testar Categorias
+                        </button>
                         <button class="btn btn-success" onclick="window.sistema.recarregarCategorias()">
                             <i class="fas fa-sync-alt"></i> Recarregar do Supabase
                         </button>
@@ -504,9 +507,6 @@
                             <label for="product-category">Categoria</label>
                             <select id="product-category" class="form-control" required>
                                 <option value="">Selecione uma categoria</option>
-                                <option value="Eletrônicos">Eletrônicos</option>
-                                <option value="Periféricos">Periféricos</option>
-                                <option value="Software">Software</option>
                             </select>
                         </div>
                     </div>

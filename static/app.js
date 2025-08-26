@@ -212,6 +212,7 @@ class SistemaEmpresarial {
                     }));
                     
                     console.log('🏷️ Categorias mapeadas:', this.data.categorias);
+                    console.log('🏷️ Nomes das categorias:', this.data.categorias.map(c => c.nome));
                     
                     // Salva no localStorage como backup
                     localStorage.setItem('categorias', JSON.stringify(this.data.categorias));
@@ -701,6 +702,11 @@ class SistemaEmpresarial {
         if (modal) {
             modal.style.display = 'block';
             document.body.style.overflow = 'hidden';
+            
+            // Se for o modal de produtos, preenche as categorias
+            if (modalId === 'add-product-modal') {
+                this.preencherDropdownCategorias();
+            }
         }
     }
 
@@ -2315,6 +2321,10 @@ class SistemaEmpresarial {
     }
 
     preencherModalProduto(produto) {
+        // Primeiro preenche as categorias no dropdown
+        this.preencherDropdownCategorias();
+        
+        // Depois preenche os campos do produto
         document.getElementById('product-name').value = produto.nome || '';
         document.getElementById('product-category').value = produto.categoria || '';
         document.getElementById('product-price').value = produto.preco || '';
@@ -2589,6 +2599,71 @@ class SistemaEmpresarial {
     showFormEstoque() {
         // Por enquanto, mostra uma notificação
         this.showNotification('Funcionalidade de adicionar item em desenvolvimento!', 'info');
+    }
+
+    // Função para preencher dropdown de categorias
+    preencherDropdownCategorias() {
+        const selectCategoria = document.getElementById('product-category');
+        if (!selectCategoria) return;
+        
+        console.log('🏷️ Preenchendo dropdown de categorias...');
+        console.log('🏷️ Categorias disponíveis:', this.data.categorias);
+        
+        // Limpa as opções existentes, mantendo apenas a primeira
+        selectCategoria.innerHTML = '<option value="">Selecione uma categoria</option>';
+        
+        // Se não há categorias, tenta recarregar do Supabase
+        if (this.data.categorias.length === 0) {
+            console.log('🏷️ Nenhuma categoria encontrada, tentando recarregar...');
+            if (this.isConnected && this.supabase) {
+                this.loadCategorias().then(() => {
+                    this.preencherDropdownCategorias();
+                }).catch(() => {
+                    this.showNotification('Erro ao carregar categorias!', 'error');
+                });
+            }
+            return;
+        }
+        
+        // Adiciona as categorias do Supabase
+        this.data.categorias.forEach(categoria => {
+            const option = document.createElement('option');
+            option.value = categoria.nome;
+            option.textContent = categoria.nome;
+            selectCategoria.appendChild(option);
+        });
+        
+        console.log('✅ Dropdown de categorias preenchido com sucesso!');
+    }
+
+    // Função para testar categorias (debug)
+    testarCategorias() {
+        console.log('🔍 === TESTE DE CATEGORIAS ===');
+        console.log('🔗 Status da conexão Supabase:', this.isConnected);
+        console.log('📦 Supabase disponível:', !!this.supabase);
+        console.log('🏷️ Categorias na memória:', this.data.categorias);
+        console.log('🏷️ Quantidade de categorias:', this.data.categorias.length);
+        
+        if (this.data.categorias.length > 0) {
+            console.log('🏷️ Primeira categoria:', this.data.categorias[0]);
+            console.log('🏷️ Nomes das categorias:', this.data.categorias.map(c => c.nome));
+        }
+        
+        // Testa o dropdown
+        const selectCategoria = document.getElementById('product-category');
+        if (selectCategoria) {
+            console.log('🏷️ Dropdown encontrado:', selectCategoria);
+            console.log('🏷️ Opções no dropdown:', selectCategoria.options.length);
+            for (let i = 0; i < selectCategoria.options.length; i++) {
+                console.log(`🏷️ Opção ${i}:`, selectCategoria.options[i].value, selectCategoria.options[i].textContent);
+            }
+        } else {
+            console.log('❌ Dropdown de categorias não encontrado!');
+        }
+        
+        console.log('🔍 === FIM DO TESTE ===');
+        
+        this.showNotification('Teste de categorias executado! Verifique o console.', 'info');
     }
 }
 
