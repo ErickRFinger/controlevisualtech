@@ -31,6 +31,11 @@ class SistemaEmpresarial {
             // Força atualização de todas as tabelas
             this.atualizarTodasTabelas();
             
+            // Inicia sincronização automática se estiver conectado ao Supabase
+            if (this.isConnected && this.supabase) {
+                this.iniciarSincronizacaoAutomatica();
+            }
+            
             console.log('✅ Sistema inicializado com sucesso!');
             
         } catch (error) {
@@ -865,11 +870,66 @@ class SistemaEmpresarial {
         }
     }
 
-    excluirCliente(id) {
+    async excluirCliente(id) {
         if (confirm('Tem certeza que deseja excluir este cliente?')) {
+            try {
+                // Tenta excluir no Supabase primeiro
+                if (this.isConnected && this.supabase) {
+                    await this.excluirClienteNoSupabase(id);
+                } else {
+                    // Se não estiver conectado, exclui localmente
+                    this.data.clientes = this.data.clientes.filter(c => c.id != id);
+                    this.salvarClientes();
+                    this.showNotification('Cliente excluído com sucesso! (Modo local)', 'success');
+                    
+                    // Atualiza a interface
+                    this.updateTabelaClientes();
+                    this.updateDashboard();
+                }
+            } catch (error) {
+                console.error('❌ Erro ao excluir cliente:', error);
+                this.showNotification('Erro ao excluir cliente!', 'error');
+            }
+        }
+    }
+
+    // Função para excluir cliente no Supabase
+    async excluirClienteNoSupabase(id) {
+        try {
+            console.log('🗑️ Excluindo cliente no Supabase:', id);
+            
+            const { data, error } = await this.supabase
+                .from('clientes')
+                .update({ ativo: false })
+                .eq('id', id);
+            
+            if (error) {
+                console.error('❌ Erro ao excluir cliente no Supabase:', error);
+                throw error;
+            }
+            
+            console.log('✅ Cliente excluído no Supabase:', data);
+            
+            // Remove da lista local
             this.data.clientes = this.data.clientes.filter(c => c.id != id);
             this.salvarClientes();
-            this.showNotification('Cliente excluído com sucesso', 'success');
+            
+            this.showNotification('Cliente excluído com sucesso no Supabase!', 'success');
+            
+            // Atualiza a interface
+            this.updateTabelaClientes();
+            this.updateDashboard();
+            
+        } catch (error) {
+            console.error('❌ Erro ao excluir no Supabase, excluindo localmente:', error);
+            
+            // Em caso de erro, exclui localmente
+            this.data.clientes = this.data.clientes.filter(c => c.id != id);
+            this.salvarClientes();
+            
+            this.showNotification('Cliente excluído localmente (erro no Supabase)', 'warning');
+            
+            // Atualiza a interface
             this.updateTabelaClientes();
             this.updateDashboard();
         }
@@ -897,12 +957,69 @@ class SistemaEmpresarial {
         }
     }
 
-    excluirProduto(id) {
+    async excluirProduto(id) {
         if (confirm('Tem certeza que deseja excluir este produto?')) {
+            try {
+                // Tenta excluir no Supabase primeiro
+                if (this.isConnected && this.supabase) {
+                    await this.excluirProdutoNoSupabase(id);
+                } else {
+                    // Se não estiver conectado, exclui localmente
+                    this.data.produtos = this.data.produtos.filter(p => p.id != id);
+                    this.atualizarEstoque();
+                    this.salvarProdutos();
+                    this.showNotification('Produto excluído com sucesso! (Modo local)', 'success');
+                    
+                    // Atualiza a interface
+                    this.updateTabelaProdutos();
+                    this.updateDashboard();
+                }
+            } catch (error) {
+                console.error('❌ Erro ao excluir produto:', error);
+                this.showNotification('Erro ao excluir produto!', 'error');
+            }
+        }
+    }
+
+    // Função para excluir produto no Supabase
+    async excluirProdutoNoSupabase(id) {
+        try {
+            console.log('🗑️ Excluindo produto no Supabase:', id);
+            
+            const { data, error } = await this.supabase
+                .from('produtos')
+                .update({ ativo: false })
+                .eq('id', id);
+            
+            if (error) {
+                console.error('❌ Erro ao excluir produto no Supabase:', error);
+                throw error;
+            }
+            
+            console.log('✅ Produto excluído no Supabase:', data);
+            
+            // Remove da lista local
             this.data.produtos = this.data.produtos.filter(p => p.id != id);
             this.atualizarEstoque();
             this.salvarProdutos();
-            this.showNotification('Produto excluído com sucesso', 'success');
+            
+            this.showNotification('Produto excluído com sucesso no Supabase!', 'success');
+            
+            // Atualiza a interface
+            this.updateTabelaProdutos();
+            this.updateDashboard();
+            
+        } catch (error) {
+            console.error('❌ Erro ao excluir no Supabase, excluindo localmente:', error);
+            
+            // Em caso de erro, exclui localmente
+            this.data.produtos = this.data.produtos.filter(p => p.id != id);
+            this.atualizarEstoque();
+            this.salvarProdutos();
+            
+            this.showNotification('Produto excluído localmente (erro no Supabase)', 'warning');
+            
+            // Atualiza a interface
             this.updateTabelaProdutos();
             this.updateDashboard();
         }
@@ -1994,14 +2111,71 @@ class SistemaEmpresarial {
     }
 
     // FUNÇÕES DE CRUD COMPLETAS
-    adicionarProduto(produto) {
-        produto.id = this.gerarId();
-        this.data.produtos.push(produto);
-        this.atualizarEstoque();
-        this.salvarProdutos();
-        this.showNotification('Produto adicionado com sucesso!', 'success');
-        this.updateTabelaProdutos();
-        this.updateDashboard();
+    async adicionarProduto(produto) {
+        try {
+            produto.id = this.gerarId();
+            
+            // Tenta salvar no Supabase primeiro
+            if (this.isConnected && this.supabase) {
+                await this.salvarProdutoNoSupabase(produto);
+            } else {
+                // Se não estiver conectado, salva localmente
+                this.data.produtos.push(produto);
+                this.salvarProdutos();
+                this.showNotification('Produto adicionado com sucesso! (Modo local)', 'success');
+            }
+            
+            // Atualiza a interface
+            this.updateTabelaProdutos();
+            this.updateDashboard();
+            
+        } catch (error) {
+            console.error('❌ Erro ao adicionar produto:', error);
+            this.showNotification('Erro ao adicionar produto!', 'error');
+        }
+    }
+
+    // Função para salvar produto no Supabase
+    async salvarProdutoNoSupabase(produto) {
+        try {
+            console.log('💾 Salvando produto no Supabase:', produto);
+            
+            const { data, error } = await this.supabase
+                .from('produtos')
+                .insert([{
+                    nome: produto.nome,
+                    descricao: produto.descricao || produto.nome,
+                    preco: produto.preco,
+                    estoque: produto.estoque,
+                    estoque_minimo: produto.estoque_minimo,
+                    categoria: produto.categoria,
+                    ativo: true
+                }]);
+            
+            if (error) {
+                console.error('❌ Erro ao salvar produto no Supabase:', error);
+                throw error;
+            }
+            
+            console.log('✅ Produto salvo no Supabase:', data);
+            
+            // Adiciona à lista local
+            this.data.produtos.push(produto);
+            
+            // Salva no localStorage como backup
+            this.salvarProdutos();
+            
+            this.showNotification('Produto adicionado com sucesso no Supabase!', 'success');
+            
+        } catch (error) {
+            console.error('❌ Erro ao salvar no Supabase, salvando localmente:', error);
+            
+            // Em caso de erro, salva localmente
+            this.data.produtos.push(produto);
+            this.salvarProdutos();
+            
+            this.showNotification('Produto adicionado localmente (erro no Supabase)', 'warning');
+        }
     }
 
     editarProduto(id) {
@@ -2013,58 +2187,174 @@ class SistemaEmpresarial {
         }
     }
 
-    atualizarProduto(id, dados) {
-        const index = this.data.produtos.findIndex(p => p.id == id);
-        if (index !== -1) {
-            this.data.produtos[index] = { ...this.data.produtos[index], ...dados };
-            this.atualizarEstoque();
-            this.salvarProdutos();
-            this.showNotification('Produto atualizado com sucesso!', 'success');
-            this.updateTabelaProdutos();
-            this.updateDashboard();
+    async atualizarProduto(id, dados) {
+        try {
+            const index = this.data.produtos.findIndex(p => p.id == id);
+            if (index !== -1) {
+                const produtoOriginal = this.data.produtos[index];
+                const produtoAtualizado = { ...produtoOriginal, ...dados };
+                
+                // Tenta atualizar no Supabase primeiro
+                if (this.isConnected && this.supabase) {
+                    await this.atualizarProdutoNoSupabase(id, dados);
+                } else {
+                    // Se não estiver conectado, atualiza localmente
+                    this.data.produtos[index] = produtoAtualizado;
+                    this.atualizarEstoque();
+                    this.salvarProdutos();
+                    this.showNotification('Produto atualizado com sucesso! (Modo local)', 'success');
+                }
+                
+                // Atualiza a interface
+                this.updateTabelaProdutos();
+                this.updateDashboard();
+            }
+        } catch (error) {
+            console.error('❌ Erro ao atualizar produto:', error);
+            this.showNotification('Erro ao atualizar produto!', 'error');
         }
     }
 
-    excluirProduto(id) {
-        if (confirm('Tem certeza que deseja excluir este produto?')) {
-            this.data.produtos = this.data.produtos.filter(p => p.id != id);
-            this.atualizarEstoque();
-            this.salvarProdutos();
-            this.showNotification('Produto excluído com sucesso', 'success');
-            this.updateTabelaProdutos();
-            this.updateDashboard();
-        }
-    }
-
-    adicionarCliente(cliente) {
-        cliente.id = this.gerarId();
-        this.data.clientes.push(cliente);
-        this.salvarClientes();
-        this.showNotification('Cliente adicionado com sucesso!', 'success');
-        this.updateTabelaClientes();
-        this.updateDashboard();
-    }
-
-    atualizarCliente(id, dados) {
-        const index = this.data.clientes.findIndex(c => c.id == id);
-        if (index !== -1) {
-            this.data.clientes[index] = { ...this.data.clientes[index], ...dados };
-            this.salvarClientes();
-            this.showNotification('Cliente atualizado com sucesso!', 'success');
+    async adicionarCliente(cliente) {
+        try {
+            cliente.id = this.gerarId();
+            
+            // Tenta salvar no Supabase primeiro
+            if (this.isConnected && this.supabase) {
+                await this.salvarClienteNoSupabase(cliente);
+            } else {
+                // Se não estiver conectado, salva localmente
+                this.data.clientes.push(cliente);
+                this.salvarClientes();
+                this.showNotification('Cliente adicionado com sucesso! (Modo local)', 'success');
+            }
+            
+            // Atualiza a interface
             this.updateTabelaClientes();
             this.updateDashboard();
+            
+        } catch (error) {
+            console.error('❌ Erro ao adicionar cliente:', error);
+            this.showNotification('Erro ao adicionar cliente!', 'error');
         }
     }
 
-    excluirCliente(id) {
-        if (confirm('Tem certeza que deseja excluir este cliente?')) {
-            this.data.clientes = this.data.clientes.filter(c => c.id != id);
+    // Função para salvar cliente no Supabase
+    async salvarClienteNoSupabase(cliente) {
+        try {
+            console.log('💾 Salvando cliente no Supabase:', cliente);
+            
+            const { data, error } = await this.supabase
+                .from('clientes')
+                .insert([{
+                    nome: cliente.nome,
+                    email: cliente.email,
+                    telefone: cliente.telefone,
+                    cidade: cliente.cidade,
+                    status: cliente.status || 'ativo',
+                    ativo: true
+                }]);
+            
+            if (error) {
+                console.error('❌ Erro ao salvar cliente no Supabase:', error);
+                throw error;
+            }
+            
+            console.log('✅ Cliente salvo no Supabase:', data);
+            
+            // Adiciona à lista local
+            this.data.clientes.push(cliente);
+            
+            // Salva no localStorage como backup
             this.salvarClientes();
-            this.showNotification('Cliente excluído com sucesso', 'success');
-            this.updateTabelaClientes();
-            this.updateDashboard();
+            
+            this.showNotification('Cliente adicionado com sucesso no Supabase!', 'success');
+            
+        } catch (error) {
+            console.error('❌ Erro ao salvar no Supabase, salvando localmente:', error);
+            
+            // Em caso de erro, salva localmente
+            this.data.clientes.push(cliente);
+            this.salvarClientes();
+            
+            this.showNotification('Cliente adicionado localmente (erro no Supabase)', 'warning');
         }
     }
+
+    async atualizarCliente(id, dados) {
+        try {
+            const index = this.data.clientes.findIndex(c => c.id == id);
+            if (index !== -1) {
+                const clienteOriginal = this.data.clientes[index];
+                const clienteAtualizado = { ...clienteOriginal, ...dados };
+                
+                // Tenta atualizar no Supabase primeiro
+                if (this.isConnected && this.supabase) {
+                    await this.atualizarClienteNoSupabase(id, dados);
+                } else {
+                    // Se não estiver conectado, atualiza localmente
+                    this.data.clientes[index] = clienteAtualizado;
+                    this.salvarClientes();
+                    this.showNotification('Cliente atualizado com sucesso! (Modo local)', 'success');
+                }
+                
+                // Atualiza a interface
+                this.updateTabelaClientes();
+                this.updateDashboard();
+            }
+        } catch (error) {
+            console.error('❌ Erro ao atualizar cliente:', error);
+            this.showNotification('Erro ao atualizar cliente!', 'error');
+        }
+    }
+
+    // Função para atualizar cliente no Supabase
+    async atualizarClienteNoSupabase(id, dados) {
+        try {
+            console.log('💾 Atualizando cliente no Supabase:', { id, dados });
+            
+            const { data, error } = await this.supabase
+                .from('clientes')
+                .update({
+                    nome: dados.nome,
+                    email: dados.email,
+                    telefone: dados.telefone,
+                    cidade: dados.cidade,
+                    status: dados.status || 'ativo'
+                })
+                .eq('id', id);
+            
+            if (error) {
+                console.error('❌ Erro ao atualizar cliente no Supabase:', error);
+                throw error;
+            }
+            
+            console.log('✅ Cliente atualizado no Supabase:', data);
+            
+            // Atualiza na lista local
+            const index = this.data.clientes.findIndex(c => c.id == id);
+            if (index !== -1) {
+                this.data.clientes[index] = { ...this.data.clientes[index], ...dados };
+                this.salvarClientes();
+            }
+            
+            this.showNotification('Cliente atualizado com sucesso no Supabase!', 'success');
+            
+        } catch (error) {
+            console.error('❌ Erro ao atualizar no Supabase, atualizando localmente:', error);
+            
+            // Em caso de erro, atualiza localmente
+            const index = this.data.clientes.findIndex(c => c.id == id);
+            if (index !== -1) {
+                this.data.clientes[index] = { ...this.data.clientes[index], ...dados };
+                this.salvarClientes();
+            }
+            
+            this.showNotification('Cliente atualizado localmente (erro no Supabase)', 'warning');
+        }
+    }
+
+
 
     adicionarCategoria(categoria) {
         try {
@@ -2664,6 +2954,219 @@ class SistemaEmpresarial {
         console.log('🔍 === FIM DO TESTE ===');
         
         this.showNotification('Teste de categorias executado! Verifique o console.', 'info');
+    }
+
+    // Função para atualizar produto no Supabase
+    async atualizarProdutoNoSupabase(id, dados) {
+        try {
+            console.log('💾 Atualizando produto no Supabase:', { id, dados });
+            
+            const { data, error } = await this.supabase
+                .from('produtos')
+                .update({
+                    nome: dados.nome,
+                    descricao: dados.descricao || dados.nome,
+                    preco: dados.preco,
+                    estoque: dados.estoque,
+                    estoque_minimo: dados.estoque_minimo,
+                    categoria: dados.categoria
+                })
+                .eq('id', id);
+            
+            if (error) {
+                console.error('❌ Erro ao atualizar produto no Supabase:', error);
+                throw error;
+            }
+            
+            console.log('✅ Produto atualizado no Supabase:', data);
+            
+            // Atualiza na lista local
+            const index = this.data.produtos.findIndex(p => p.id == id);
+            if (index !== -1) {
+                this.data.produtos[index] = { ...this.data.produtos[index], ...dados };
+                this.atualizarEstoque();
+                this.salvarProdutos();
+            }
+            
+            this.showNotification('Produto atualizado com sucesso no Supabase!', 'success');
+            
+        } catch (error) {
+            console.error('❌ Erro ao atualizar no Supabase, atualizando localmente:', error);
+            
+            // Em caso de erro, atualiza localmente
+            const index = this.data.produtos.findIndex(p => p.id == id);
+            if (index !== -1) {
+                this.data.produtos[index] = { ...this.data.produtos[index], ...dados };
+                this.atualizarEstoque();
+                this.salvarProdutos();
+            }
+            
+            this.showNotification('Produto atualizado localmente (erro no Supabase)', 'warning');
+        }
+    }
+
+    async adicionarVenda(venda) {
+        try {
+            venda.id = this.gerarId();
+            venda.data = new Date().toLocaleDateString();
+            
+            // Tenta salvar no Supabase primeiro
+            if (this.isConnected && this.supabase) {
+                await this.salvarVendaNoSupabase(venda);
+            } else {
+                // Se não estiver conectado, salva localmente
+                this.data.vendas.push(venda);
+                this.salvarVendas();
+                this.showNotification('Venda registrada com sucesso! (Modo local)', 'success');
+            }
+            
+            // Atualiza estoque do produto
+            const produto = this.data.produtos.find(p => p.nome === venda.produto);
+            if (produto) {
+                produto.estoque -= venda.quantidade;
+                this.atualizarEstoque();
+                this.salvarProdutos();
+            }
+            
+            // Atualiza a interface
+            this.updateTabelaVendas();
+            this.updateDashboard();
+            
+        } catch (error) {
+            console.error('❌ Erro ao adicionar venda:', error);
+            this.showNotification('Erro ao registrar venda!', 'error');
+        }
+    }
+
+    // Função para salvar venda no Supabase
+    async salvarVendaNoSupabase(venda) {
+        try {
+            console.log('💾 Salvando venda no Supabase:', venda);
+            
+            const { data, error } = await this.supabase
+                .from('vendas')
+                .insert([{
+                    cliente: venda.cliente,
+                    produto: venda.produto,
+                    quantidade: venda.quantidade,
+                    valor: venda.valor,
+                    data: venda.data,
+                    ativo: true
+                }]);
+            
+            if (error) {
+                console.error('❌ Erro ao salvar venda no Supabase:', error);
+                throw error;
+            }
+            
+            console.log('✅ Venda salva no Supabase:', data);
+            
+            // Adiciona à lista local
+            this.data.vendas.push(venda);
+            
+            // Salva no localStorage como backup
+            this.salvarVendas();
+            
+            this.showNotification('Venda registrada com sucesso no Supabase!', 'success');
+            
+        } catch (error) {
+            console.error('❌ Erro ao salvar no Supabase, salvando localmente:', error);
+            
+            // Em caso de erro, salva localmente
+            this.data.vendas.push(venda);
+            this.salvarVendas();
+            
+            this.showNotification('Venda registrada localmente (erro no Supabase)', 'warning');
+        }
+    }
+
+    // Função para sincronização automática em tempo real
+    iniciarSincronizacaoAutomatica() {
+        if (!this.isConnected || !this.supabase) {
+            console.log('⚠️ Sincronização automática não disponível (Supabase não conectado)');
+            return;
+        }
+        
+        console.log('🔄 Iniciando sincronização automática...');
+        
+        // Sincroniza a cada 30 segundos
+        setInterval(async () => {
+            try {
+                await this.verificarMudancasSupabase();
+            } catch (error) {
+                console.error('❌ Erro na sincronização automática:', error);
+            }
+        }, 30000); // 30 segundos
+        
+        console.log('✅ Sincronização automática iniciada (a cada 30 segundos)');
+    }
+
+    // Função para verificar mudanças no Supabase
+    async verificarMudancasSupabase() {
+        try {
+            console.log('🔍 Verificando mudanças no Supabase...');
+            
+            // Verifica se há novos produtos
+            const { data: novosProdutos } = await this.supabase
+                .from('produtos')
+                .select('*')
+                .eq('ativo', true)
+                .gt('id', Math.max(...this.data.produtos.map(p => p.id || 0), 0));
+            
+            if (novosProdutos && novosProdutos.length > 0) {
+                console.log('🆕 Novos produtos encontrados:', novosProdutos);
+                await this.loadProdutos();
+                this.updateTabelaProdutos();
+                this.showNotification(`${novosProdutos.length} novos produtos sincronizados!`, 'info');
+            }
+            
+            // Verifica se há novos clientes
+            const { data: novosClientes } = await this.supabase
+                .from('clientes')
+                .select('*')
+                .eq('ativo', true)
+                .gt('id', Math.max(...this.data.clientes.map(c => c.id || 0), 0));
+            
+            if (novosClientes && novosClientes.length > 0) {
+                console.log('🆕 Novos clientes encontrados:', novosClientes);
+                await this.loadClientes();
+                this.updateTabelaClientes();
+                this.showNotification(`${novosClientes.length} novos clientes sincronizados!`, 'info');
+            }
+            
+            // Verifica se há novas categorias
+            const { data: novasCategorias } = await this.supabase
+                .from('categorias')
+                .select('*')
+                .eq('ativo', true)
+                .gt('id', Math.max(...this.data.categorias.map(c => c.id || 0), 0));
+            
+            if (novasCategorias && novasCategorias.length > 0) {
+                console.log('🆕 Novas categorias encontradas:', novasCategorias);
+                await this.loadCategorias();
+                this.updateTabelaCategorias();
+                this.showNotification(`${novasCategorias.length} novas categorias sincronizadas!`, 'info');
+            }
+            
+            // Verifica se há novas vendas
+            const { data: novasVendas } = await this.supabase
+                .from('vendas')
+                .select('*')
+                .eq('ativo', true)
+                .gt('id', Math.max(...this.data.vendas.map(v => v.id || 0), 0));
+            
+            if (novasVendas && novasVendas.length > 0) {
+                console.log('🆕 Novas vendas encontradas:', novasVendas);
+                await this.loadVendas();
+                this.updateTabelaVendas();
+                this.showNotification(`${novasVendas.length} novas vendas sincronizadas!`, 'info');
+            }
+            
+            console.log('✅ Verificação de mudanças concluída');
+            
+        } catch (error) {
+            console.error('❌ Erro ao verificar mudanças no Supabase:', error);
+        }
     }
 }
 
