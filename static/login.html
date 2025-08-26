@@ -51,7 +51,12 @@
                         <i class="fas fa-lock"></i>
                         Senha
                     </label>
-                    <input type="password" id="password" name="password" placeholder="Digite sua senha" required>
+                    <div class="password-input-container">
+                        <input type="password" id="password" name="password" placeholder="Digite sua senha" required>
+                        <button type="button" class="password-toggle" onclick="togglePassword()">
+                            <i class="fas fa-eye" id="passwordIcon"></i>
+                        </button>
+                    </div>
                 </div>
 
                 <div class="form-options">
@@ -60,7 +65,11 @@
                         <span class="checkmark"></span>
                         Lembrar de mim
                     </label>
-                    <a href="#" class="forgot-password">Esqueceu a senha?</a>
+                    <label class="checkbox-container">
+                        <input type="checkbox" id="savePassword" name="savePassword">
+                        <span class="checkmark"></span>
+                        Manter senha armazenada
+                    </label>
                 </div>
 
                 <button type="submit" class="btn btn-primary btn-login">
@@ -70,7 +79,17 @@
             </form>
 
             <div class="login-footer">
-                <p>Usuário padrão: <strong>erick</strong> | Senha: <strong>visual3369</strong></p>
+                <div class="credentials-info">
+                    <p><i class="fas fa-info-circle"></i> Credenciais de Acesso:</p>
+                    <div class="credential-item">
+                        <span class="credential-label">Usuário:</span>
+                        <span class="credential-value">erick</span>
+                    </div>
+                    <div class="credential-item">
+                        <span class="credential-label">Senha:</span>
+                        <span class="credential-value">visual3369</span>
+                    </div>
+                </div>
                 <div class="theme-toggle">
                     <button class="btn btn-info btn-sm" onclick="toggleTheme()">
                         <i class="fas fa-moon"></i>
@@ -82,7 +101,7 @@
     </div>
 
     <script>
-        // Sistema de Login Simples
+        // Sistema de Login Aprimorado
         class SistemaLogin {
             constructor() {
                 this.init();
@@ -92,6 +111,7 @@
                 this.setupForm();
                 this.checkAuth();
                 this.loadTheme();
+                this.loadSavedCredentials();
             }
 
             setupForm() {
@@ -100,28 +120,63 @@
                     e.preventDefault();
                     this.handleLogin();
                 });
+
+                // Auto-preenchimento se credenciais salvas
+                this.autoFillCredentials();
+            }
+
+            loadSavedCredentials() {
+                const savedUsername = localStorage.getItem('rememberUser');
+                const savedPassword = localStorage.getItem('savedPassword');
+                
+                if (savedUsername) {
+                    document.getElementById('username').value = savedUsername;
+                    document.getElementById('remember').checked = true;
+                }
+                
+                if (savedPassword) {
+                    document.getElementById('password').value = savedPassword;
+                    document.getElementById('savePassword').checked = true;
+                }
+            }
+
+            autoFillCredentials() {
+                // Auto-preenche com credenciais padrão se não houver dados salvos
+                if (!localStorage.getItem('rememberUser') && !localStorage.getItem('savedPassword')) {
+                    document.getElementById('username').value = 'erick';
+                    document.getElementById('password').value = 'visual3369';
+                }
             }
 
             handleLogin() {
                 const username = document.getElementById('username').value;
                 const password = document.getElementById('password').value;
                 const remember = document.getElementById('remember').checked;
+                const savePassword = document.getElementById('savePassword').checked;
 
-                // Validação simples
+                // Validação das credenciais específicas
                 if (username === 'erick' && password === 'visual3369') {
-                    this.loginSuccess(username, remember);
+                    this.loginSuccess(username, remember, savePassword);
                 } else {
-                    this.showError('Usuário ou senha incorretos!');
+                    this.showError('Usuário ou senha incorretos! Use: erick / visual3369');
                 }
             }
 
-            loginSuccess(username, remember) {
+            loginSuccess(username, remember, savePassword) {
                 // Salva autenticação
                 localStorage.setItem('isAuthenticated', 'true');
                 localStorage.setItem('username', username);
                 
                 if (remember) {
                     localStorage.setItem('rememberUser', username);
+                } else {
+                    localStorage.removeItem('rememberUser');
+                }
+                
+                if (savePassword) {
+                    localStorage.setItem('savedPassword', 'visual3369');
+                } else {
+                    localStorage.removeItem('savedPassword');
                 }
 
                 this.showSuccess('Login realizado com sucesso! Redirecionando...');
@@ -203,6 +258,20 @@
         // Função global para alternar tema
         function toggleTheme() {
             window.sistemaLogin.toggleTheme();
+        }
+
+        // Função para mostrar/ocultar senha
+        function togglePassword() {
+            const passwordInput = document.getElementById('password');
+            const passwordIcon = document.getElementById('passwordIcon');
+            
+            if (passwordInput.type === 'password') {
+                passwordInput.type = 'text';
+                passwordIcon.className = 'fas fa-eye-slash';
+            } else {
+                passwordInput.type = 'password';
+                passwordIcon.className = 'fas fa-eye';
+            }
         }
 
         // Inicialização

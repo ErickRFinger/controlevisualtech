@@ -85,10 +85,32 @@ class SistemaEmpresarial {
 
     async loadProdutos() {
         try {
-            const { data, error } = await this.supabase.from('produtos').select('*');
-            if (error) throw error;
-            this.data.produtos = data || [];
-            console.log(`📦 ${this.data.produtos.length} produtos carregados`);
+            if (this.isConnected && this.supabase) {
+                // Busca produtos com join na tabela de categorias
+                const { data, error } = await this.supabase
+                    .from('produtos')
+                    .select(`
+                        *,
+                        categorias(nome)
+                    `)
+                    .eq('ativo', true);
+                
+                if (error) throw error;
+                
+                // Processa os dados para extrair o nome da categoria
+                this.data.produtos = (data || []).map(produto => ({
+                    ...produto,
+                    categoria: produto.categorias?.nome || produto.categoria || 'Sem categoria',
+                    estoque: produto.estoque || produto.quantidade || 0,
+                    estoque_minimo: produto.estoque_minimo || produto.quantidade_minima || 0,
+                    nome: produto.nome || produto.descricao || 'Produto sem nome'
+                }));
+                
+                console.log(`📦 ${this.data.produtos.length} produtos carregados do Supabase`);
+            } else {
+                console.warn('⚠️ Supabase não disponível, usando dados locais');
+                this.loadDadosLocais();
+            }
         } catch (error) {
             console.error('❌ Erro ao carregar produtos:', error);
             this.data.produtos = [];
@@ -97,10 +119,29 @@ class SistemaEmpresarial {
 
     async loadClientes() {
         try {
-            const { data, error } = await this.supabase.from('clientes').select('*');
-            if (error) throw error;
-            this.data.clientes = data || [];
-            console.log(`👥 ${this.data.clientes.length} clientes carregados`);
+            if (this.isConnected && this.supabase) {
+                const { data, error } = await this.supabase
+                    .from('clientes')
+                    .select('*')
+                    .eq('ativo', true);
+                
+                if (error) throw error;
+                
+                // Processa os dados para garantir compatibilidade
+                this.data.clientes = (data || []).map(cliente => ({
+                    ...cliente,
+                    nome: cliente.nome || cliente.nome_completo || 'Cliente sem nome',
+                    email: cliente.email || cliente.email_contato || 'Sem email',
+                    telefone: cliente.telefone || cliente.telefone_contato || 'Sem telefone',
+                    cidade: cliente.cidade || cliente.cidade_estado || 'Sem cidade',
+                    status: cliente.status || 'ativo'
+                }));
+                
+                console.log(`👥 ${this.data.clientes.length} clientes carregados do Supabase`);
+            } else {
+                console.warn('⚠️ Supabase não disponível, usando dados locais');
+                this.loadDadosLocais();
+            }
         } catch (error) {
             console.error('❌ Erro ao carregar clientes:', error);
             this.data.clientes = [];
@@ -109,10 +150,28 @@ class SistemaEmpresarial {
 
     async loadCategorias() {
         try {
-            const { data, error } = await this.supabase.from('categorias').select('*');
-            if (error) throw error;
-            this.data.categorias = data || [];
-            console.log(`🏷️ ${this.data.categorias.length} categorias carregadas`);
+            if (this.isConnected && this.supabase) {
+                const { data, error } = await this.supabase
+                    .from('categorias')
+                    .select('*')
+                    .eq('ativo', true);
+                
+                if (error) throw error;
+                
+                // Processa os dados para garantir compatibilidade
+                this.data.categorias = (data || []).map(categoria => ({
+                    ...categoria,
+                    nome: categoria.nome || categoria.nome_categoria || 'Categoria sem nome',
+                    descricao: categoria.descricao || categoria.descricao_categoria || 'Sem descrição',
+                    status: categoria.status || 'ativo',
+                    observacoes: categoria.observacoes || categoria.obs || 'Sem observações'
+                }));
+                
+                console.log(`🏷️ ${this.data.categorias.length} categorias carregadas do Supabase`);
+            } else {
+                console.warn('⚠️ Supabase não disponível, usando dados locais');
+                this.loadDadosLocais();
+            }
         } catch (error) {
             console.error('❌ Erro ao carregar categorias:', error);
             this.data.categorias = [];
@@ -121,10 +180,29 @@ class SistemaEmpresarial {
 
     async loadVendas() {
         try {
-            const { data, error } = await this.supabase.from('vendas').select('*');
-            if (error) throw error;
-            this.data.vendas = data || [];
-            console.log(`🛒 ${this.data.vendas.length} vendas carregadas`);
+            if (this.isConnected && this.supabase) {
+                const { data, error } = await this.supabase
+                    .from('vendas')
+                    .select('*')
+                    .eq('ativo', true);
+                
+                if (error) throw error;
+                
+                // Processa os dados para garantir compatibilidade
+                this.data.vendas = (data || []).map(venda => ({
+                    ...venda,
+                    cliente: venda.cliente || venda.cliente_nome || 'Cliente não encontrado',
+                    produto: venda.produto || venda.produto_nome || 'Produto não encontrado',
+                    quantidade: venda.quantidade || 1,
+                    valor: venda.valor || venda.valor_total || 0,
+                    data: venda.data || venda.data_venda || new Date().toLocaleDateString()
+                }));
+                
+                console.log(`🛒 ${this.data.vendas.length} vendas carregadas do Supabase`);
+            } else {
+                console.warn('⚠️ Supabase não disponível, usando dados locais');
+                this.loadDadosLocais();
+            }
         } catch (error) {
             console.error('❌ Erro ao carregar vendas:', error);
             this.data.vendas = [];
@@ -133,10 +211,31 @@ class SistemaEmpresarial {
 
     async loadEstoque() {
         try {
-            const { data, error } = await this.supabase.from('estoque').select('*');
-            if (error) throw error;
-            this.data.estoque = data || [];
-            console.log(`📦 ${this.data.estoque.length} itens de estoque carregados`);
+            if (this.isConnected && this.supabase) {
+                // Busca estoque com join na tabela de produtos
+                const { data, error } = await this.supabase
+                    .from('estoque')
+                    .select(`
+                        *,
+                        produtos(nome, preco)
+                    `)
+                    .eq('ativo', true);
+                
+                if (error) throw error;
+                
+                // Processa os dados para extrair o nome do produto
+                this.data.estoque = (data || []).map(item => ({
+                    ...item,
+                    produto: item.produtos?.nome || item.produto || 'Produto não encontrado',
+                    quantidade: item.quantidade || 0,
+                    minimo: item.minimo || item.quantidade_minima || 0
+                }));
+                
+                console.log(`📦 ${this.data.estoque.length} itens de estoque carregados do Supabase`);
+            } else {
+                console.warn('⚠️ Supabase não disponível, usando dados locais');
+                this.loadDadosLocais();
+            }
         } catch (error) {
             console.error('❌ Erro ao carregar estoque:', error);
             this.data.estoque = [];
@@ -296,11 +395,20 @@ class SistemaEmpresarial {
         const rows = tbody.querySelectorAll('tr:not(.empty-row)');
         
         rows.forEach(row => {
-            if (row.querySelector('.action-buttons')) return;
+            // Remove botões existentes para evitar duplicação
+            const existingButtons = row.querySelector('.action-buttons');
+            if (existingButtons) {
+                existingButtons.remove();
+            }
             
-            let actionCell = row.querySelector('td:last-child');
+            let actionCell = row.querySelector('.action-cell');
+            if (!actionCell) {
+                actionCell = row.querySelector('td:last-child');
+            }
+            
             if (!actionCell) {
                 actionCell = document.createElement('td');
+                actionCell.className = 'action-cell';
                 row.appendChild(actionCell);
             }
             
@@ -317,6 +425,7 @@ class SistemaEmpresarial {
                 
                 button.addEventListener('click', (e) => {
                     e.preventDefault();
+                    e.stopPropagation();
                     this.handleActionClick(config.action, row);
                 });
                 
@@ -349,30 +458,70 @@ class SistemaEmpresarial {
         
         console.log(`🔄 Executando ação: ${action} para ID: ${id}`);
         
-        switch(action) {
-            case 'editarCliente': this.editarCliente(id); break;
-            case 'excluirCliente': this.excluirCliente(id); break;
-            case 'editarProduto': this.editarProduto(id); break;
-            case 'ajustarEstoque': this.ajustarEstoque(id); break;
-            case 'vendaRapida': this.vendaRapida(id); break;
-            case 'excluirProduto': this.excluirProduto(id); break;
-            case 'editarCategoria': this.editarCategoria(id); break;
-            case 'excluirCategoria': this.excluirCategoria(id); break;
-            case 'verDetalhesVenda': this.verDetalhesVenda(id); break;
-            case 'cancelarVenda': this.cancelarVenda(id); break;
-            default: console.warn(`⚠️ Ação não implementada: ${action}`);
+        try {
+            switch(action) {
+                case 'editarCliente': 
+                    this.editarCliente(id); 
+                    break;
+                case 'excluirCliente': 
+                    this.excluirCliente(id); 
+                    break;
+                case 'editarProduto': 
+                    this.editarProduto(id); 
+                    break;
+                case 'ajustarEstoque': 
+                    this.ajustarEstoque(id); 
+                    break;
+                case 'vendaRapida': 
+                    this.vendaRapida(id); 
+                    break;
+                case 'excluirProduto': 
+                    this.excluirProduto(id); 
+                    break;
+                case 'editarCategoria': 
+                    this.editarCategoria(id); 
+                    break;
+                case 'excluirCategoria': 
+                    this.excluirCategoria(id); 
+                    break;
+                case 'verDetalhesVenda': 
+                    this.verDetalhesVenda(id); 
+                    break;
+                case 'cancelarVenda': 
+                    this.cancelarVenda(id); 
+                    break;
+                default: 
+                    console.warn(`⚠️ Ação não implementada: ${action}`);
+                    this.showNotification(`Ação ${action} não implementada`, 'warning');
+            }
+        } catch (error) {
+            console.error(`❌ Erro ao executar ação ${action}:`, error);
+            this.showNotification(`Erro ao executar ação: ${error.message}`, 'error');
         }
     }
 
     getRowId(row) {
-        const idCell = row.querySelector('[data-id]');
-        if (idCell) return idCell.getAttribute('data-id');
+        // Primeiro tenta encontrar o atributo data-id na própria linha
+        const rowId = row.getAttribute('data-id');
+        if (rowId) return rowId;
         
+        // Se não encontrar, tenta encontrar o ID na primeira célula
         const firstCell = row.querySelector('td:first-child');
         if (firstCell && firstCell.textContent.trim()) {
-            return firstCell.textContent.trim();
+            // Tenta extrair um ID numérico do texto
+            const text = firstCell.textContent.trim();
+            const match = text.match(/\d+/);
+            if (match) return match[0];
         }
         
+        // Como último recurso, tenta encontrar qualquer célula com data-id
+        const idCell = row.querySelector('[data-id]');
+        if (idCell) {
+            const id = idCell.getAttribute('data-id');
+            if (id) return id;
+        }
+        
+        console.warn('⚠️ Não foi possível encontrar ID para a linha:', row);
         return null;
     }
 
@@ -764,15 +913,18 @@ class SistemaEmpresarial {
                         ${cliente.status || 'ativo'}
                     </span>
                 </td>
-                <td></td>
+                <td class="action-cell"></td>
             `;
             tbody.appendChild(row);
         });
         
+        // Adiciona os botões de ação após criar todas as linhas
         this.addActionButtonsToRows(tbody, [
             { type: 'edit', icon: 'fas fa-edit', class: 'btn-warning', action: 'editarCliente' },
             { type: 'delete', icon: 'fas fa-trash', class: 'btn-danger', action: 'excluirCliente' }
         ]);
+        
+        console.log('👥 Tabela de clientes atualizada:', this.data.clientes);
     }
 
          updateTabelaProdutos() {
@@ -812,11 +964,12 @@ class SistemaEmpresarial {
                          ${(produto.estoque || 0) > (produto.estoque_minimo || 0) ? 'Disponível' : 'Baixo'}
                      </span>
                  </td>
-                 <td></td>
+                 <td class="action-cell"></td>
              `;
              tbody.appendChild(row);
          });
          
+         // Adiciona os botões de ação após criar todas as linhas
          this.addActionButtonsToRows(tbody, [
              { type: 'edit', icon: 'fas fa-edit', class: 'btn-warning', action: 'editarProduto' },
              { type: 'stock', icon: 'fas fa-boxes', class: 'btn-success', action: 'ajustarEstoque' },
@@ -863,14 +1016,17 @@ class SistemaEmpresarial {
                     </span>
                 </td>
                 <td>${new Date().toLocaleDateString()}</td>
-                <td></td>
+                <td class="action-cell"></td>
             `;
             tbody.appendChild(row);
         });
         
+        // Adiciona os botões de ação após criar todas as linhas
         this.addActionButtonsToRows(tbody, [
             { type: 'stock', icon: 'fas fa-boxes', class: 'btn-success', action: 'ajustarEstoque' }
         ]);
+        
+        console.log('📦 Tabela de estoque atualizada:', this.data.estoque);
     }
 
     updateTabelaVendas() {
@@ -905,15 +1061,18 @@ class SistemaEmpresarial {
                 <td>${venda.quantidade || 0}</td>
                 <td>R$ ${(venda.valor || 0).toFixed(2)}</td>
                 <td>${venda.data || 'N/A'}</td>
-                <td></td>
+                <td class="action-cell"></td>
             `;
             tbody.appendChild(row);
         });
         
+        // Adiciona os botões de ação após criar todas as linhas
         this.addActionButtonsToRows(tbody, [
             { type: 'view', icon: 'fas fa-eye', class: 'btn-info', action: 'verDetalhesVenda' },
             { type: 'cancel', icon: 'fas fa-times', class: 'btn-danger', action: 'cancelarVenda' }
         ]);
+        
+        console.log('🛒 Tabela de vendas atualizada:', this.data.vendas);
     }
 
     updateTabelaCategorias() {
@@ -951,15 +1110,18 @@ class SistemaEmpresarial {
                     </span>
                 </td>
                 <td>${categoria.observacoes || 'N/A'}</td>
-                <td></td>
+                <td class="action-cell"></td>
             `;
             tbody.appendChild(row);
         });
         
+        // Adiciona os botões de ação após criar todas as linhas
         this.addActionButtonsToRows(tbody, [
             { type: 'edit', icon: 'fas fa-edit', class: 'btn-warning', action: 'editarCategoria' },
             { type: 'delete', icon: 'fas fa-trash', class: 'btn-danger', action: 'excluirCategoria' }
         ]);
+        
+        console.log('🏷️ Tabela de categorias atualizada:', this.data.categorias);
     }
 
                     updateRelatorios() {
