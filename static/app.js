@@ -9,19 +9,37 @@ class SistemaEmpresarial {
         this.init();
     }
 
-                    async init() {
-                    try {
-                        console.log('🚀 Inicializando Sistema Empresarial...');
-                        this.loadTheme();
-                        await this.initSupabase();
-                        await this.loadAllData();
-                        this.setupInterface();
-                        this.showNotification('Sistema carregado com sucesso!', 'success');
-                    } catch (error) {
-                        console.error('❌ Erro na inicialização:', error);
-                        this.showNotification('Erro ao inicializar sistema', 'error');
-                    }
-                }
+    async init() {
+        try {
+            console.log('🚀 Iniciando sistema...');
+            
+            // Carrega tema
+            this.loadTheme();
+            
+            // Inicializa Supabase
+            await this.initSupabase();
+            
+            // Carrega todos os dados
+            await this.loadAllData();
+            
+            // Configura a interface
+            this.setupInterface();
+            
+            // Verifica sincronização
+            this.verificarSincronizacao();
+            
+            // Força atualização de todas as tabelas
+            this.atualizarTodasTabelas();
+            
+            console.log('✅ Sistema inicializado com sucesso!');
+            
+        } catch (error) {
+            console.error('❌ Erro na inicialização:', error);
+            // Em caso de erro, tenta usar dados locais
+            this.loadDadosLocais();
+            this.setupInterface();
+        }
+    }
 
     async initSupabase() {
         try {
@@ -212,8 +230,10 @@ class SistemaEmpresarial {
     async loadEstoque() {
         try {
             if (this.isConnected && this.supabase) {
-                // Busca estoque com join na tabela de produtos
-                const { data, error } = await this.supabase
+                console.log('🔍 Buscando dados de estoque no Supabase...');
+                
+                // Primeiro, tenta buscar da tabela estoque
+                let { data, error } = await this.supabase
                     .from('estoque')
                     .select(`
                         *,
@@ -221,97 +241,121 @@ class SistemaEmpresarial {
                     `)
                     .eq('ativo', true);
                 
-                if (error) throw error;
+                if (error) {
+                    console.warn('⚠️ Erro ao buscar tabela estoque:', error);
+                    // Se não conseguir buscar da tabela estoque, tenta buscar dos produtos
+                    const { data: produtosData, error: produtosError } = await this.supabase
+                        .from('produtos')
+                        .select('*')
+                        .eq('ativo', true);
+                    
+                    if (produtosError) throw produtosError;
+                    
+                    // Cria estoque baseado nos produtos
+                    this.data.estoque = (produtosData || []).map(produto => ({
+                        id: produto.id,
+                        produto: produto.nome || produto.descricao || 'Produto sem nome',
+                        quantidade: produto.estoque || produto.quantidade || 0,
+                        minimo: produto.estoque_minimo || produto.quantidade_minima || 0,
+                        ativo: produto.ativo || true
+                    }));
+                    
+                    console.log(`📦 ${this.data.estoque.length} itens de estoque criados a partir dos produtos do Supabase`);
+                } else {
+                    // Processa os dados da tabela estoque
+                    this.data.estoque = (data || []).map(item => ({
+                        id: item.id,
+                        produto: item.produtos?.nome || item.produto || 'Produto não encontrado',
+                        quantidade: item.quantidade || 0,
+                        minimo: item.minimo || item.quantidade_minima || 0,
+                        ativo: item.ativo || true
+                    }));
+                    
+                    console.log(`📦 ${this.data.estoque.length} itens de estoque carregados da tabela estoque do Supabase`);
+                }
                 
-                // Processa os dados para extrair o nome do produto
-                this.data.estoque = (data || []).map(item => ({
-                    id: item.id,
-                    produto: item.produtos?.nome || item.produto || 'Produto não encontrado',
-                    quantidade: item.quantidade || 0,
-                    minimo: item.minimo || item.quantidade_minima || 0,
-                    ativo: item.ativo || true
-                }));
+                // Salva no localStorage para backup
+                localStorage.setItem('estoque', JSON.stringify(this.data.estoque));
                 
-                console.log(`📦 ${this.data.estoque.length} itens de estoque carregados do Supabase`);
             } else {
                 console.warn('⚠️ Supabase não disponível, usando dados locais');
                 this.loadDadosLocais();
             }
         } catch (error) {
-            console.error('❌ Erro ao carregar estoque:', error);
+            console.error('❌ Erro ao carregar estoque do Supabase:', error);
             // Em caso de erro, tenta carregar dados locais
             this.loadDadosLocais();
         }
     }
 
-                    loadDadosLocais() {
-                    // Carrega dados salvos no localStorage ou usa padrão
-                    const produtosSalvos = localStorage.getItem('produtos');
-                    const clientesSalvos = localStorage.getItem('clientes');
-                    const categoriasSalvos = localStorage.getItem('categorias');
-                    const vendasSalvos = localStorage.getItem('vendas');
-                    const estoqueSalvos = localStorage.getItem('estoque');
+    loadDadosLocais() {
+        // Carrega dados salvos no localStorage ou usa padrão
+        const produtosSalvos = localStorage.getItem('produtos');
+        const clientesSalvos = localStorage.getItem('clientes');
+        const categoriasSalvos = localStorage.getItem('categorias');
+        const vendasSalvos = localStorage.getItem('vendas');
+        const estoqueSalvos = localStorage.getItem('estoque');
 
-                    if (produtosSalvos) {
-                        this.data.produtos = JSON.parse(produtosSalvos);
-                    } else {
-                        this.data.produtos = [
-                            { id: 1, nome: 'Notebook Dell Inspiron', preco: 2999.99, estoque: 15, estoque_minimo: 5, categoria: 'Eletrônicos' },
-                            { id: 2, nome: 'Mouse Gamer RGB', preco: 89.99, estoque: 45, estoque_minimo: 10, categoria: 'Periféricos' },
-                            { id: 3, nome: 'Teclado Mecânico', preco: 199.99, estoque: 25, estoque_minimo: 8, categoria: 'Periféricos' },
-                            { id: 4, nome: 'Monitor 24" Full HD', preco: 599.99, estoque: 12, estoque_minimo: 3, categoria: 'Eletrônicos' }
-                        ];
-                        this.salvarProdutos();
-                    }
+        if (produtosSalvos) {
+            this.data.produtos = JSON.parse(produtosSalvos);
+        } else {
+            this.data.produtos = [
+                { id: 1, nome: 'Notebook Dell Inspiron', preco: 2999.99, estoque: 15, estoque_minimo: 5, categoria: 'Eletrônicos' },
+                { id: 2, nome: 'Mouse Gamer RGB', preco: 89.99, estoque: 45, estoque_minimo: 10, categoria: 'Periféricos' },
+                { id: 3, nome: 'Teclado Mecânico', preco: 199.99, estoque: 25, estoque_minimo: 8, categoria: 'Periféricos' },
+                { id: 4, nome: 'Monitor 24" Full HD', preco: 599.99, estoque: 12, estoque_minimo: 3, categoria: 'Eletrônicos' }
+            ];
+            this.salvarProdutos();
+        }
 
-                    if (clientesSalvos) {
-                        this.data.clientes = JSON.parse(clientesSalvos);
-                    } else {
-                        this.data.clientes = [
-                            { id: 1, nome: 'João Silva', email: 'joao@email.com', telefone: '11999999999', cidade: 'São Paulo', status: 'ativo' },
-                            { id: 2, nome: 'Maria Santos', email: 'maria@email.com', telefone: '11888888888', cidade: 'Rio de Janeiro', status: 'ativo' },
-                            { id: 3, nome: 'Pedro Costa', email: 'pedro@email.com', telefone: '11777777777', cidade: 'Belo Horizonte', status: 'ativo' }
-                        ];
-                        this.salvarClientes();
-                    }
+        if (clientesSalvos) {
+            this.data.clientes = JSON.parse(clientesSalvos);
+        } else {
+            this.data.clientes = [
+                { id: 1, nome: 'João Silva', email: 'joao@email.com', telefone: '11999999999', cidade: 'São Paulo', status: 'ativo' },
+                { id: 2, nome: 'Maria Santos', email: 'maria@email.com', telefone: '11888888888', cidade: 'Rio de Janeiro', status: 'ativo' },
+                { id: 3, nome: 'Pedro Costa', email: 'pedro@email.com', telefone: '11777777777', cidade: 'Belo Horizonte', status: 'ativo' }
+            ];
+            this.salvarClientes();
+        }
 
-                    if (categoriasSalvos) {
-                        this.data.categorias = JSON.parse(categoriasSalvos);
-                    } else {
-                        this.data.categorias = [
-                            { id: 1, nome: 'Eletrônicos', descricao: 'Produtos eletrônicos', status: 'ativo', observacoes: 'Categoria principal' },
-                            { id: 2, nome: 'Periféricos', descricao: 'Acessórios para computador', status: 'ativo', observacoes: 'Acessórios' },
-                            { id: 3, nome: 'Software', descricao: 'Programas e licenças', status: 'ativo', observacoes: 'Licenças' }
-                        ];
-                        this.salvarCategorias();
-                    }
+        if (categoriasSalvos) {
+            this.data.categorias = JSON.parse(categoriasSalvos);
+        } else {
+            this.data.categorias = [
+                { id: 1, nome: 'Eletrônicos', descricao: 'Produtos eletrônicos', status: 'ativo', observacoes: 'Categoria principal' },
+                { id: 2, nome: 'Periféricos', descricao: 'Acessórios para computador', status: 'ativo', observacoes: 'Acessórios' },
+                { id: 3, nome: 'Software', descricao: 'Programas e licenças', status: 'ativo', observacoes: 'Licenças' }
+            ];
+            this.salvarCategorias();
+        }
 
-                    if (vendasSalvos) {
-                        this.data.vendas = JSON.parse(vendasSalvos);
-                    } else {
-                        this.data.vendas = [
-                            { id: 1, cliente: 'João Silva', produto: 'Notebook Dell Inspiron', quantidade: 1, valor: 2999.99, data: new Date().toLocaleDateString() },
-                            { id: 2, cliente: 'Maria Santos', produto: 'Mouse Gamer RGB', quantidade: 2, valor: 179.98, data: new Date().toLocaleDateString() }
-                        ];
-                        this.salvarVendas();
-                    }
+        if (vendasSalvos) {
+            this.data.vendas = JSON.parse(vendasSalvos);
+        } else {
+            this.data.vendas = [
+                { id: 1, cliente: 'João Silva', produto: 'Notebook Dell Inspiron', quantidade: 1, valor: 2999.99, data: new Date().toLocaleDateString() },
+                { id: 2, cliente: 'Maria Santos', produto: 'Mouse Gamer RGB', quantidade: 2, valor: 179.98, data: new Date().toLocaleDateString() }
+            ];
+            this.salvarVendas();
+        }
 
-                    // Carrega estoque salvo ou atualiza baseado nos produtos
-                    if (estoqueSalvos) {
-                        this.data.estoque = JSON.parse(estoqueSalvos);
-                    } else {
-                        this.atualizarEstoque();
-                    }
-                    console.log('📱 Dados locais carregados');
-                }
+        // Carrega estoque salvo ou atualiza baseado nos produtos
+        if (estoqueSalvos) {
+            this.data.estoque = JSON.parse(estoqueSalvos);
+        } else {
+            this.atualizarEstoque();
+        }
+        console.log('📱 Dados locais carregados');
+    }
 
-                    setupInterface() {
-                    this.setupNavigation();
-                    this.setupActionButtons();
-                    this.setupModals();
-                    this.setupModalEvents();
-                    this.updateDashboard();
-                }
+    setupInterface() {
+        this.setupNavigation();
+        this.setupActionButtons();
+        this.setupModals();
+        this.setupModalEvents();
+        this.updateDashboard();
+    }
 
     setupNavigation() {
         const navButtons = document.querySelectorAll('.nav-btn');
@@ -527,66 +571,66 @@ class SistemaEmpresarial {
         return null;
     }
 
-                    setupModals() {
-                    const modals = document.querySelectorAll('.modal');
-                    modals.forEach(modal => {
-                        const closeBtn = modal.querySelector('.close');
-                        if (closeBtn) {
-                            closeBtn.addEventListener('click', () => this.closeModal(modal.id));
-                        }
+    setupModals() {
+        const modals = document.querySelectorAll('.modal');
+        modals.forEach(modal => {
+            const closeBtn = modal.querySelector('.close');
+            if (closeBtn) {
+                closeBtn.addEventListener('click', () => this.closeModal(modal.id));
+            }
 
-                        modal.addEventListener('click', (e) => {
-                            if (e.target === modal) this.closeModal(modal.id);
-                        });
-                    });
-                }
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) this.closeModal(modal.id);
+            });
+        });
+    }
 
-                setupModalEvents() {
-                    // Modal de Produto
-                    const modalProduto = document.getElementById('add-product-modal');
-                    if (modalProduto) {
-                        const btnSalvar = modalProduto.querySelector('.btn-primary');
-                        if (btnSalvar) {
-                            btnSalvar.addEventListener('click', () => this.salvarProduto());
-                        }
-                    }
+    setupModalEvents() {
+        // Modal de Produto
+        const modalProduto = document.getElementById('add-product-modal');
+        if (modalProduto) {
+            const btnSalvar = modalProduto.querySelector('.btn-primary');
+            if (btnSalvar) {
+                btnSalvar.addEventListener('click', () => this.salvarProduto());
+            }
+        }
 
-                    // Modal de Cliente
-                    const modalCliente = document.getElementById('add-client-modal');
-                    if (modalCliente) {
-                        const btnSalvar = modalCliente.querySelector('.btn-primary');
-                        if (btnSalvar) {
-                            btnSalvar.addEventListener('click', () => this.salvarCliente());
-                        }
-                    }
+        // Modal de Cliente
+        const modalCliente = document.getElementById('add-client-modal');
+        if (modalCliente) {
+            const btnSalvar = modalCliente.querySelector('.btn-primary');
+            if (btnSalvar) {
+                btnSalvar.addEventListener('click', () => this.salvarCliente());
+            }
+        }
 
-                    // Modal de Categoria
-                    const modalCategoria = document.getElementById('add-category-modal');
-                    if (modalCategoria) {
-                        const btnSalvar = modalCategoria.querySelector('.btn-primary');
-                        if (btnSalvar) {
-                            btnSalvar.addEventListener('click', () => this.salvarCategoria());
-                        }
-                    }
+        // Modal de Categoria
+        const modalCategoria = document.getElementById('add-category-modal');
+        if (modalCategoria) {
+            const btnSalvar = modalCategoria.querySelector('.btn-primary');
+            if (btnSalvar) {
+                btnSalvar.addEventListener('click', () => this.salvarCategoria());
+            }
+        }
 
-                    // Modal de Estoque
-                    const modalEstoque = document.getElementById('adjust-stock-modal');
-                    if (modalEstoque) {
-                        const btnAjustar = modalEstoque.querySelector('.btn-primary');
-                        if (btnAjustar) {
-                            btnAjustar.addEventListener('click', () => this.salvarAjusteEstoque());
-                        }
-                    }
+        // Modal de Estoque
+        const modalEstoque = document.getElementById('adjust-stock-modal');
+        if (modalEstoque) {
+            const btnAjustar = modalEstoque.querySelector('.btn-primary');
+            if (btnAjustar) {
+                btnAjustar.addEventListener('click', () => this.salvarAjusteEstoque());
+            }
+        }
 
-                    // Modal de Venda
-                    const modalVenda = document.getElementById('add-sale-modal');
-                    if (modalVenda) {
-                        const btnFinalizar = modalVenda.querySelector('.btn-primary');
-                        if (btnFinalizar) {
-                            btnFinalizar.addEventListener('click', () => this.salvarVenda());
-                        }
-                    }
-                }
+        // Modal de Venda
+        const modalVenda = document.getElementById('add-sale-modal');
+        if (modalVenda) {
+            const btnFinalizar = modalVenda.querySelector('.btn-primary');
+            if (btnFinalizar) {
+                btnFinalizar.addEventListener('click', () => this.salvarVenda());
+            }
+        }
+    }
 
     showModal(modalId) {
         const modal = document.getElementById(modalId);
@@ -596,252 +640,252 @@ class SistemaEmpresarial {
         }
     }
 
-                    closeModal(modalId) {
-                    const modal = document.getElementById(modalId);
-                    if (modal) {
-                        modal.style.display = 'none';
-                        document.body.style.overflow = 'auto';
-                        this.limparModal(modalId);
-                    }
+    closeModal(modalId) {
+        const modal = document.getElementById(modalId);
+        if (modal) {
+            modal.style.display = 'none';
+            document.body.style.overflow = 'auto';
+            this.limparModal(modalId);
+        }
+    }
+
+    limparModal(modalId) {
+        const modal = document.getElementById(modalId);
+        if (!modal) return;
+
+        // Remove atributo de edição
+        modal.removeAttribute('data-edit-id');
+
+        // Limpa campos de input
+        const inputs = modal.querySelectorAll('input, textarea, select');
+        inputs.forEach(input => {
+            if (input.type !== 'submit' && input.type !== 'button') {
+                input.value = '';
+                input.disabled = false;
+            }
+        });
+    }
+
+    // FUNÇÕES DE SALVAMENTO DOS MODAIS
+    salvarProduto() {
+        const nome = document.getElementById('product-name').value;
+        const categoria = document.getElementById('product-category').value;
+        const preco = parseFloat(document.getElementById('product-price').value);
+        const estoque = parseInt(document.getElementById('product-stock').value);
+        const estoqueMinimo = parseInt(document.getElementById('product-min-stock').value);
+
+        if (!nome || !categoria || !preco || !estoque || !estoqueMinimo) {
+            this.showNotification('Preencha todos os campos!', 'error');
+            return;
+        }
+
+        const modal = document.getElementById('add-product-modal');
+        const editId = modal.getAttribute('data-edit-id');
+
+        if (editId) {
+            // Editando produto existente
+            this.atualizarProduto(editId, { nome, categoria, preco, estoque, estoque_minimo: estoqueMinimo });
+        } else {
+            // Adicionando novo produto
+            this.adicionarProduto({ nome, categoria, preco, estoque, estoque_minimo: estoqueMinimo });
+        }
+
+        this.closeModal('add-product-modal');
+    }
+
+    salvarCliente() {
+        const nome = document.getElementById('client-name').value;
+        const email = document.getElementById('client-email').value;
+        const telefone = document.getElementById('client-phone').value;
+        const cidade = document.getElementById('client-city').value;
+
+        if (!nome || !email || !telefone || !cidade) {
+            this.showNotification('Preencha todos os campos!', 'error');
+            return;
+        }
+
+        const modal = document.getElementById('add-client-modal');
+        const editId = modal.getAttribute('data-edit-id');
+
+        if (editId) {
+            this.atualizarCliente(editId, { nome, email, telefone, cidade });
+        } else {
+            this.adicionarCliente({ nome, email, telefone, cidade, status: 'ativo' });
+        }
+
+        this.closeModal('add-client-modal');
+    }
+
+    salvarCategoria() {
+        const nome = document.getElementById('category-name').value;
+        const descricao = document.getElementById('category-description').value;
+        const observacoes = document.getElementById('category-observations').value;
+
+        if (!nome) {
+            this.showNotification('Nome da categoria é obrigatório!', 'error');
+            return;
+        }
+
+        const modal = document.getElementById('add-category-modal');
+        const editId = modal.getAttribute('data-edit-id');
+
+        if (editId) {
+            this.atualizarCategoria(editId, { nome, descricao, observacoes });
+        } else {
+            this.adicionarCategoria({ nome, descricao, observacoes, status: 'ativo' });
+        }
+
+        this.closeModal('add-category-modal');
+    }
+
+    salvarAjusteEstoque() {
+        const quantidade = parseInt(document.getElementById('stock-quantity').value);
+        const tipo = document.getElementById('stock-type').value;
+        const observacao = document.getElementById('stock-observation').value;
+
+        if (!quantidade || quantidade <= 0) {
+            this.showNotification('Quantidade deve ser maior que zero!', 'error');
+            return;
+        }
+
+        const modal = document.getElementById('adjust-stock-modal');
+        const editId = modal.getAttribute('data-edit-id');
+
+        if (editId) {
+            this.aplicarAjusteEstoque(editId, quantidade, tipo, observacao);
+            this.closeModal('adjust-stock-modal');
+        }
+    }
+
+    salvarVenda() {
+        const cliente = document.getElementById('sale-client').value;
+        const produto = document.getElementById('sale-product').value;
+        const quantidade = parseInt(document.getElementById('sale-quantity').value);
+        const preco = parseFloat(document.getElementById('sale-price').value);
+
+        if (!cliente || !produto || !quantidade || !preco) {
+            this.showNotification('Preencha todos os campos!', 'error');
+            return;
+        }
+
+        if (quantidade <= 0) {
+            this.showNotification('Quantidade deve ser maior que zero!', 'error');
+            return;
+        }
+
+        // Verifica se há estoque suficiente
+        const produtoEstoque = this.data.produtos.find(p => p.nome === produto);
+        if (produtoEstoque && produtoEstoque.estoque < quantidade) {
+            this.showNotification('Estoque insuficiente!', 'error');
+            return;
+        }
+
+        const valor = quantidade * preco;
+        this.adicionarVenda({ cliente, produto, quantidade, valor });
+        this.closeModal('add-sale-modal');
+    }
+
+    // FUNÇÕES DE CRUD (MANTIDAS PARA COMPATIBILIDADE)
+    editarCliente(id) {
+        const cliente = this.data.clientes.find(c => c.id == id);
+        if (cliente) {
+            this.preencherModalCliente(cliente);
+            this.showModal('add-client-modal');
+            this.showNotification('Editando cliente...', 'info');
+        }
+    }
+
+    excluirCliente(id) {
+        if (confirm('Tem certeza que deseja excluir este cliente?')) {
+            this.data.clientes = this.data.clientes.filter(c => c.id != id);
+            this.salvarClientes();
+            this.showNotification('Cliente excluído com sucesso', 'success');
+            this.updateTabelaClientes();
+            this.updateDashboard();
+        }
+    }
+
+    editarProduto(id) {
+        const produto = this.data.produtos.find(p => p.id == id);
+        if (produto) {
+            this.preencherModalProduto(produto);
+            this.showModal('add-product-modal');
+            this.showNotification('Editando produto...', 'info');
+        }
+    }
+
+    ajustarEstoque(id) {
+        this.ajustarEstoque(id);
+    }
+
+    vendaRapida(id) {
+        const produto = this.data.produtos.find(p => p.id == id);
+        if (produto) {
+            this.preencherModalVenda(produto);
+            this.showModal('add-sale-modal');
+            this.showNotification('Venda rápida...', 'info');
+        }
+    }
+
+    excluirProduto(id) {
+        if (confirm('Tem certeza que deseja excluir este produto?')) {
+            this.data.produtos = this.data.produtos.filter(p => p.id != id);
+            this.atualizarEstoque();
+            this.salvarProdutos();
+            this.showNotification('Produto excluído com sucesso', 'success');
+            this.updateTabelaProdutos();
+            this.updateDashboard();
+        }
+    }
+
+    editarCategoria(id) {
+        const categoria = this.data.categorias.find(c => c.id == id);
+        if (categoria) {
+            this.preencherModalCategoria(categoria);
+            this.showModal('add-category-modal');
+            this.showNotification('Editando categoria...', 'info');
+        }
+    }
+
+    excluirCategoria(id) {
+        if (confirm('Tem certeza que deseja excluir esta categoria?')) {
+            this.data.categorias = this.data.categorias.filter(c => c.id != id);
+            this.salvarCategorias();
+            this.showNotification('Categoria excluída com sucesso', 'success');
+            this.updateTabelaCategorias();
+            this.updateDashboard();
+        }
+    }
+
+    verDetalhesVenda(id) {
+        const venda = this.data.vendas.find(v => v.id == id);
+        if (venda) {
+            this.showNotification(`Venda: ${venda.produto} - Qtd: ${venda.quantidade} - R$ ${venda.valor}`, 'info');
+        }
+    }
+
+    cancelarVenda(id) {
+        if (confirm('Tem certeza que deseja cancelar esta venda?')) {
+            const venda = this.data.vendas.find(v => v.id == id);
+            if (venda) {
+                // Restaura estoque
+                const produto = this.data.produtos.find(p => p.nome === venda.produto);
+                if (produto) {
+                    produto.estoque += venda.quantidade;
+                    this.atualizarEstoque();
+                    this.salvarProdutos();
                 }
-
-                limparModal(modalId) {
-                    const modal = document.getElementById(modalId);
-                    if (!modal) return;
-
-                    // Remove atributo de edição
-                    modal.removeAttribute('data-edit-id');
-
-                    // Limpa campos de input
-                    const inputs = modal.querySelectorAll('input, textarea, select');
-                    inputs.forEach(input => {
-                        if (input.type !== 'submit' && input.type !== 'button') {
-                            input.value = '';
-                            input.disabled = false;
-                        }
-                    });
-                }
-
-                // FUNÇÕES DE SALVAMENTO DOS MODAIS
-                salvarProduto() {
-                    const nome = document.getElementById('product-name').value;
-                    const categoria = document.getElementById('product-category').value;
-                    const preco = parseFloat(document.getElementById('product-price').value);
-                    const estoque = parseInt(document.getElementById('product-stock').value);
-                    const estoqueMinimo = parseInt(document.getElementById('product-min-stock').value);
-
-                    if (!nome || !categoria || !preco || !estoque || !estoqueMinimo) {
-                        this.showNotification('Preencha todos os campos!', 'error');
-                        return;
-                    }
-
-                    const modal = document.getElementById('add-product-modal');
-                    const editId = modal.getAttribute('data-edit-id');
-
-                    if (editId) {
-                        // Editando produto existente
-                        this.atualizarProduto(editId, { nome, categoria, preco, estoque, estoque_minimo: estoqueMinimo });
-                    } else {
-                        // Adicionando novo produto
-                        this.adicionarProduto({ nome, categoria, preco, estoque, estoque_minimo: estoqueMinimo });
-                    }
-
-                    this.closeModal('add-product-modal');
-                }
-
-                salvarCliente() {
-                    const nome = document.getElementById('client-name').value;
-                    const email = document.getElementById('client-email').value;
-                    const telefone = document.getElementById('client-phone').value;
-                    const cidade = document.getElementById('client-city').value;
-
-                    if (!nome || !email || !telefone || !cidade) {
-                        this.showNotification('Preencha todos os campos!', 'error');
-                        return;
-                    }
-
-                    const modal = document.getElementById('add-client-modal');
-                    const editId = modal.getAttribute('data-edit-id');
-
-                    if (editId) {
-                        this.atualizarCliente(editId, { nome, email, telefone, cidade });
-                    } else {
-                        this.adicionarCliente({ nome, email, telefone, cidade, status: 'ativo' });
-                    }
-
-                    this.closeModal('add-client-modal');
-                }
-
-                salvarCategoria() {
-                    const nome = document.getElementById('category-name').value;
-                    const descricao = document.getElementById('category-description').value;
-                    const observacoes = document.getElementById('category-observations').value;
-
-                    if (!nome) {
-                        this.showNotification('Nome da categoria é obrigatório!', 'error');
-                        return;
-                    }
-
-                    const modal = document.getElementById('add-category-modal');
-                    const editId = modal.getAttribute('data-edit-id');
-
-                    if (editId) {
-                        this.atualizarCategoria(editId, { nome, descricao, observacoes });
-                    } else {
-                        this.adicionarCategoria({ nome, descricao, observacoes, status: 'ativo' });
-                    }
-
-                    this.closeModal('add-category-modal');
-                }
-
-                salvarAjusteEstoque() {
-                    const quantidade = parseInt(document.getElementById('stock-quantity').value);
-                    const tipo = document.getElementById('stock-type').value;
-                    const observacao = document.getElementById('stock-observation').value;
-
-                    if (!quantidade || quantidade <= 0) {
-                        this.showNotification('Quantidade deve ser maior que zero!', 'error');
-                        return;
-                    }
-
-                    const modal = document.getElementById('adjust-stock-modal');
-                    const editId = modal.getAttribute('data-edit-id');
-
-                    if (editId) {
-                        this.aplicarAjusteEstoque(editId, quantidade, tipo, observacao);
-                        this.closeModal('adjust-stock-modal');
-                    }
-                }
-
-                salvarVenda() {
-                    const cliente = document.getElementById('sale-client').value;
-                    const produto = document.getElementById('sale-product').value;
-                    const quantidade = parseInt(document.getElementById('sale-quantity').value);
-                    const preco = parseFloat(document.getElementById('sale-price').value);
-
-                    if (!cliente || !produto || !quantidade || !preco) {
-                        this.showNotification('Preencha todos os campos!', 'error');
-                        return;
-                    }
-
-                    if (quantidade <= 0) {
-                        this.showNotification('Quantidade deve ser maior que zero!', 'error');
-                        return;
-                    }
-
-                    // Verifica se há estoque suficiente
-                    const produtoEstoque = this.data.produtos.find(p => p.nome === produto);
-                    if (produtoEstoque && produtoEstoque.estoque < quantidade) {
-                        this.showNotification('Estoque insuficiente!', 'error');
-                        return;
-                    }
-
-                    const valor = quantidade * preco;
-                    this.adicionarVenda({ cliente, produto, quantidade, valor });
-                    this.closeModal('add-sale-modal');
-                }
-
-                    // FUNÇÕES DE CRUD (MANTIDAS PARA COMPATIBILIDADE)
-                editarCliente(id) {
-                    const cliente = this.data.clientes.find(c => c.id == id);
-                    if (cliente) {
-                        this.preencherModalCliente(cliente);
-                        this.showModal('add-client-modal');
-                        this.showNotification('Editando cliente...', 'info');
-                    }
-                }
-
-                excluirCliente(id) {
-                    if (confirm('Tem certeza que deseja excluir este cliente?')) {
-                        this.data.clientes = this.data.clientes.filter(c => c.id != id);
-                        this.salvarClientes();
-                        this.showNotification('Cliente excluído com sucesso', 'success');
-                        this.updateTabelaClientes();
-                        this.updateDashboard();
-                    }
-                }
-
-                editarProduto(id) {
-                    const produto = this.data.produtos.find(p => p.id == id);
-                    if (produto) {
-                        this.preencherModalProduto(produto);
-                        this.showModal('add-product-modal');
-                        this.showNotification('Editando produto...', 'info');
-                    }
-                }
-
-                ajustarEstoque(id) {
-                    this.ajustarEstoque(id);
-                }
-
-                vendaRapida(id) {
-                    const produto = this.data.produtos.find(p => p.id == id);
-                    if (produto) {
-                        this.preencherModalVenda(produto);
-                        this.showModal('add-sale-modal');
-                        this.showNotification('Venda rápida...', 'info');
-                    }
-                }
-
-                excluirProduto(id) {
-                    if (confirm('Tem certeza que deseja excluir este produto?')) {
-                        this.data.produtos = this.data.produtos.filter(p => p.id != id);
-                        this.atualizarEstoque();
-                        this.salvarProdutos();
-                        this.showNotification('Produto excluído com sucesso', 'success');
-                        this.updateTabelaProdutos();
-                        this.updateDashboard();
-                    }
-                }
-
-                editarCategoria(id) {
-                    const categoria = this.data.categorias.find(c => c.id == id);
-                    if (categoria) {
-                        this.preencherModalCategoria(categoria);
-                        this.showModal('add-category-modal');
-                        this.showNotification('Editando categoria...', 'info');
-                    }
-                }
-
-                excluirCategoria(id) {
-                    if (confirm('Tem certeza que deseja excluir esta categoria?')) {
-                        this.data.categorias = this.data.categorias.filter(c => c.id != id);
-                        this.salvarCategorias();
-                        this.showNotification('Categoria excluída com sucesso', 'success');
-                        this.updateTabelaCategorias();
-                        this.updateDashboard();
-                    }
-                }
-
-                verDetalhesVenda(id) {
-                    const venda = this.data.vendas.find(v => v.id == id);
-                    if (venda) {
-                        this.showNotification(`Venda: ${venda.produto} - Qtd: ${venda.quantidade} - R$ ${venda.valor}`, 'info');
-                    }
-                }
-
-                cancelarVenda(id) {
-                    if (confirm('Tem certeza que deseja cancelar esta venda?')) {
-                        const venda = this.data.vendas.find(v => v.id == id);
-                        if (venda) {
-                            // Restaura estoque
-                            const produto = this.data.produtos.find(p => p.nome === venda.produto);
-                            if (produto) {
-                                produto.estoque += venda.quantidade;
-                                this.atualizarEstoque();
-                                this.salvarProdutos();
-                            }
-                            
-                            // Remove venda
-                            this.data.vendas = this.data.vendas.filter(v => v.id != id);
-                            this.salvarVendas();
-                            
-                            this.showNotification('Venda cancelada com sucesso', 'success');
-                            this.updateTabelaVendas();
-                            this.updateDashboard();
-                        }
-                    }
-                }
+                
+                // Remove venda
+                this.data.vendas = this.data.vendas.filter(v => v.id != id);
+                this.salvarVendas();
+                
+                this.showNotification('Venda cancelada com sucesso', 'success');
+                this.updateTabelaVendas();
+                this.updateDashboard();
+            }
+        }
+    }
 
     // ATUALIZAÇÃO DAS TABELAS
     updateDashboard() {
@@ -929,58 +973,58 @@ class SistemaEmpresarial {
         console.log('👥 Tabela de clientes atualizada:', this.data.clientes);
     }
 
-         updateTabelaProdutos() {
-         const tbody = document.querySelector('#produtos-table tbody');
-         if (!tbody) return;
-         
-         tbody.innerHTML = '';
-         
-         if (this.data.produtos.length === 0) {
-             tbody.innerHTML = `
-                 <tr class="empty-row">
-                     <td colspan="7">
-                         <div class="empty-message">
-                             <div class="empty-state">
-                                 <i class="fas fa-box"></i>
-                                 <h4>Nenhum produto encontrado</h4>
-                                 <p>Adicione seu primeiro produto para começar</p>
-                             </div>
-                         </div>
-                     </td>
-                 </tr>
-             `;
-             return;
-         }
-         
-         this.data.produtos.forEach(produto => {
-             const row = document.createElement('tr');
-             row.setAttribute('data-id', produto.id);
-             row.innerHTML = `
-                 <td>${produto.nome || 'N/A'}</td>
-                 <td>${produto.categoria || 'Sem categoria'}</td>
-                 <td>R$ ${(produto.preco || 0).toFixed(2)}</td>
-                 <td>${produto.estoque || 0}</td>
-                 <td>${produto.estoque_minimo || 0}</td>
-                 <td>
-                     <span class="status-badge ${(produto.estoque || 0) > (produto.estoque_minimo || 0) ? 'success' : 'warning'}">
-                         ${(produto.estoque || 0) > (produto.estoque_minimo || 0) ? 'Disponível' : 'Baixo'}
-                     </span>
-                 </td>
-                 <td class="action-cell"></td>
-             `;
-             tbody.appendChild(row);
-         });
-         
-         // Adiciona os botões de ação após criar todas as linhas
-         this.addActionButtonsToRows(tbody, [
-             { type: 'edit', icon: 'fas fa-edit', class: 'btn-warning', action: 'editarProduto' },
-             { type: 'stock', icon: 'fas fa-boxes', class: 'btn-success', action: 'ajustarEstoque' },
-             { type: 'sale', icon: 'fas fa-shopping-cart', class: 'btn-primary', action: 'vendaRapida' },
-             { type: 'delete', icon: 'fas fa-trash', class: 'btn-danger', action: 'excluirProduto' }
-         ]);
-         
-         console.log('📦 Tabela de produtos atualizada:', this.data.produtos);
-     }
+    updateTabelaProdutos() {
+        const tbody = document.querySelector('#produtos-table tbody');
+        if (!tbody) return;
+        
+        tbody.innerHTML = '';
+        
+        if (this.data.produtos.length === 0) {
+            tbody.innerHTML = `
+                <tr class="empty-row">
+                    <td colspan="7">
+                        <div class="empty-message">
+                            <div class="empty-state">
+                                <i class="fas fa-box"></i>
+                                <h4>Nenhum produto encontrado</h4>
+                                <p>Adicione seu primeiro produto para começar</p>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+            `;
+            return;
+        }
+        
+        this.data.produtos.forEach(produto => {
+            const row = document.createElement('tr');
+            row.setAttribute('data-id', produto.id);
+            row.innerHTML = `
+                <td>${produto.nome || 'N/A'}</td>
+                <td>${produto.categoria || 'Sem categoria'}</td>
+                <td>R$ ${(produto.preco || 0).toFixed(2)}</td>
+                <td>${produto.estoque || 0}</td>
+                <td>${produto.estoque_minimo || 0}</td>
+                <td>
+                    <span class="status-badge ${(produto.estoque || 0) > (produto.estoque_minimo || 0) ? 'success' : 'warning'}">
+                        ${(produto.estoque || 0) > (produto.estoque_minimo || 0) ? 'Disponível' : 'Baixo'}
+                    </span>
+                </td>
+                <td class="action-cell"></td>
+            `;
+            tbody.appendChild(row);
+        });
+        
+        // Adiciona os botões de ação após criar todas as linhas
+        this.addActionButtonsToRows(tbody, [
+            { type: 'edit', icon: 'fas fa-edit', class: 'btn-warning', action: 'editarProduto' },
+            { type: 'stock', icon: 'fas fa-boxes', class: 'btn-success', action: 'ajustarEstoque' },
+            { type: 'sale', icon: 'fas fa-shopping-cart', class: 'btn-primary', action: 'vendaRapida' },
+            { type: 'delete', icon: 'fas fa-trash', class: 'btn-danger', action: 'excluirProduto' }
+        ]);
+        
+        console.log('📦 Tabela de produtos atualizada:', this.data.produtos);
+    }
 
     updateTabelaEstoque() {
         const tbody = document.querySelector('#estoque-table tbody');
@@ -988,25 +1032,27 @@ class SistemaEmpresarial {
         
         tbody.innerHTML = '';
         
-        // Garante que o estoque esteja atualizado
-        if (this.data.estoque.length === 0 && this.data.produtos.length > 0) {
-            this.atualizarEstoque();
+        // Se não há dados de estoque, tenta recarregar do Supabase primeiro
+        if (this.data.estoque.length === 0) {
+            console.log('📦 Nenhum dado de estoque encontrado, tentando recarregar...');
+            // Tenta recarregar do Supabase se estiver conectado
+            if (this.isConnected && this.supabase) {
+                this.loadEstoque().then(() => {
+                    // Recursivamente chama a função após carregar os dados
+                    this.updateTabelaEstoque();
+                }).catch(() => {
+                    // Se falhar, mostra mensagem de erro
+                    this.showEmptyEstoqueMessage(tbody);
+                });
+                return;
+            } else {
+                // Se não estiver conectado ao Supabase, usa dados locais
+                this.atualizarEstoque();
+            }
         }
         
         if (this.data.estoque.length === 0) {
-            tbody.innerHTML = `
-                <tr class="empty-row">
-                    <td colspan="6">
-                        <div class="empty-message">
-                            <div class="empty-state">
-                                <i class="fas fa-boxes"></i>
-                                <h4>Nenhum item de estoque encontrado</h4>
-                                <p>Adicione produtos para gerenciar o estoque</p>
-                            </div>
-                        </div>
-                    </td>
-                </tr>
-            `;
+            this.showEmptyEstoqueMessage(tbody);
             return;
         }
         
@@ -1041,6 +1087,22 @@ class SistemaEmpresarial {
         ]);
         
         console.log('📦 Tabela de estoque atualizada:', this.data.estoque);
+    }
+
+    showEmptyEstoqueMessage(tbody) {
+        tbody.innerHTML = `
+            <tr class="empty-row">
+                <td colspan="6">
+                    <div class="empty-message">
+                        <div class="empty-state">
+                            <i class="fas fa-boxes"></i>
+                            <h4>Nenhum item de estoque encontrado</h4>
+                            <p>Adicione produtos para gerenciar o estoque</p>
+                        </div>
+                    </div>
+                </td>
+            </tr>
+        `;
     }
 
     updateTabelaVendas() {
@@ -1138,754 +1200,848 @@ class SistemaEmpresarial {
         console.log('🏷️ Tabela de categorias atualizada:', this.data.categorias);
     }
 
-                    updateRelatorios() {
-                    console.log('📊 Atualizando relatórios...');
-                    
-                    // Atualiza os cards de resumo
-                    this.atualizarResumoExecutivo();
-                    
-                    // Atualiza os gráficos
-                    this.atualizarGraficoVendas();
-                    this.atualizarGraficoCategorias();
-                    this.atualizarGraficoClientesRegiao();
-                    
-                    // Atualiza as listas
-                    this.atualizarTopProdutos();
-                    this.atualizarEstoqueCritico();
-                    this.atualizarMetricasPerformance();
-                    
-                    // Preenche os filtros
-                    this.preencherFiltros();
-                    
-                    console.log('📊 Relatórios atualizados com sucesso!');
-                }
+    updateRelatorios() {
+        console.log('📊 Atualizando relatórios...');
+        
+        // Atualiza os cards de resumo
+        this.atualizarResumoExecutivo();
+        
+        // Atualiza os gráficos
+        this.atualizarGraficoVendas();
+        this.atualizarGraficoCategorias();
+        this.atualizarGraficoClientesRegiao();
+        
+        // Atualiza as listas
+        this.atualizarTopProdutos();
+        this.atualizarEstoqueCritico();
+        this.atualizarMetricasPerformance();
+        
+        // Preenche os filtros
+        this.preencherFiltros();
+        
+        console.log('📊 Relatórios atualizados com sucesso!');
+    }
 
-                // FUNÇÕES AUXILIARES PARA RELATÓRIOS
-                atualizarResumoExecutivo() {
-                    const hoje = new Date();
-                    const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
-                    
-                    // Calcula vendas do mês
-                    const vendasMes = this.data.vendas.filter(venda => {
-                        const dataVenda = new Date(venda.data);
-                        return dataVenda >= inicioMes && dataVenda <= hoje;
-                    });
-                    
-                    // Total de vendas
-                    const totalVendas = vendasMes.length;
-                    const totalVendasElement = document.getElementById('total-vendas');
-                    if (totalVendasElement) totalVendasElement.textContent = totalVendas;
-                    
-                    // Receita total
-                    const receitaTotal = vendasMes.reduce((total, venda) => total + (venda.valor || 0), 0);
-                    const receitaTotalElement = document.getElementById('receita-total');
-                    if (receitaTotalElement) receitaTotalElement.textContent = `R$ ${receitaTotal.toFixed(2)}`;
-                    
-                    // Clientes ativos
-                    const clientesAtivos = this.data.clientes.filter(cliente => cliente.status === 'ativo').length;
-                    const clientesAtivosElement = document.getElementById('clientes-ativos');
-                    if (clientesAtivosElement) clientesAtivosElement.textContent = clientesAtivos;
-                    
-                    // Produtos em estoque
-                    const produtosEstoque = this.data.produtos.reduce((total, produto) => total + (produto.estoque || 0), 0);
-                    const produtosEstoqueElement = document.getElementById('produtos-estoque');
-                    if (produtosEstoqueElement) produtosEstoqueElement.textContent = produtosEstoque;
-                }
+    // FUNÇÕES AUXILIARES PARA RELATÓRIOS
+    atualizarResumoExecutivo() {
+        const hoje = new Date();
+        const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+        
+        // Calcula vendas do mês
+        const vendasMes = this.data.vendas.filter(venda => {
+            const dataVenda = new Date(venda.data);
+            return dataVenda >= inicioMes && dataVenda <= hoje;
+        });
+        
+        // Total de vendas
+        const totalVendas = vendasMes.length;
+        const totalVendasElement = document.getElementById('total-vendas');
+        if (totalVendasElement) totalVendasElement.textContent = totalVendas;
+        
+        // Receita total
+        const receitaTotal = vendasMes.reduce((total, venda) => total + (venda.valor || 0), 0);
+        const receitaTotalElement = document.getElementById('receita-total');
+        if (receitaTotalElement) receitaTotalElement.textContent = `R$ ${receitaTotal.toFixed(2)}`;
+        
+        // Clientes ativos
+        const clientesAtivos = this.data.clientes.filter(cliente => cliente.status === 'ativo').length;
+        const clientesAtivosElement = document.getElementById('clientes-ativos');
+        if (clientesAtivosElement) clientesAtivosElement.textContent = clientesAtivos;
+        
+        // Produtos em estoque
+        const produtosEstoque = this.data.produtos.reduce((total, produto) => total + (produto.estoque || 0), 0);
+        const produtosEstoqueElement = document.getElementById('produtos-estoque');
+        if (produtosEstoqueElement) produtosEstoqueElement.textContent = produtosEstoque;
+    }
 
-                atualizarGraficoVendas() {
-                    const periodo = parseInt(document.getElementById('vendas-periodo')?.value || 30);
-                    const hoje = new Date();
-                    const inicio = new Date(hoje.getTime() - (periodo * 24 * 60 * 60 * 1000));
-                    
-                    // Agrupa vendas por dia
-                    const vendasPorDia = {};
-                    for (let d = new Date(inicio); d <= hoje; d.setDate(d.getDate() + 1)) {
-                        const dataStr = d.toISOString().split('T')[0];
-                        vendasPorDia[dataStr] = 0;
-                    }
-                    
-                    this.data.vendas.forEach(venda => {
-                        const dataVenda = new Date(venda.data);
-                        if (dataVenda >= inicio && dataVenda <= hoje) {
-                            const dataStr = dataVenda.toISOString().split('T')[0];
-                            vendasPorDia[dataStr] = (vendasPorDia[dataStr] || 0) + 1;
-                        }
-                    });
-                    
-                    // Cria o gráfico
-                    this.criarGraficoLinha('vendas-chart', {
-                        labels: Object.keys(vendasPorDia),
-                        datasets: [{
-                            label: 'Vendas',
-                            data: Object.values(vendasPorDia),
-                            borderColor: '#667eea',
-                            backgroundColor: 'rgba(102, 126, 234, 0.1)',
-                            tension: 0.4
-                        }]
-                    });
-                }
+    atualizarGraficoVendas() {
+        const periodo = parseInt(document.getElementById('vendas-periodo')?.value || 30);
+        const hoje = new Date();
+        const inicio = new Date(hoje.getTime() - (periodo * 24 * 60 * 60 * 1000));
+        
+        // Agrupa vendas por dia
+        const vendasPorDia = {};
+        for (let d = new Date(inicio); d <= hoje; d.setDate(d.getDate() + 1)) {
+            const dataStr = d.toISOString().split('T')[0];
+            vendasPorDia[dataStr] = 0;
+        }
+        
+        this.data.vendas.forEach(venda => {
+            const dataVenda = new Date(venda.data);
+            if (dataVenda >= inicio && dataVenda <= hoje) {
+                const dataStr = dataVenda.toISOString().split('T')[0];
+                vendasPorDia[dataStr] = (vendasPorDia[dataStr] || 0) + 1;
+            }
+        });
+        
+        // Cria o gráfico
+        this.criarGraficoLinha('vendas-chart', {
+            labels: Object.keys(vendasPorDia),
+            datasets: [{
+                label: 'Vendas',
+                data: Object.values(vendasPorDia),
+                borderColor: '#667eea',
+                backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                tension: 0.4
+            }]
+        });
+    }
 
-                atualizarGraficoCategorias() {
-                    // Agrupa produtos por categoria
-                    const produtosPorCategoria = {};
-                    this.data.produtos.forEach(produto => {
-                        const categoria = produto.categoria || 'Sem categoria';
-                        produtosPorCategoria[categoria] = (produtosPorCategoria[categoria] || 0) + 1;
-                    });
-                    
-                    // Cria o gráfico de pizza
-                    this.criarGraficoPizza('categorias-chart', {
-                        labels: Object.keys(produtosPorCategoria),
-                        datasets: [{
-                            data: Object.values(produtosPorCategoria),
-                            backgroundColor: [
-                                '#667eea',
-                                '#764ba2',
-                                '#f093fb',
-                                '#f5576c',
-                                '#4facfe',
-                                '#00f2fe'
-                            ]
-                        }]
-                    });
-                }
+    atualizarGraficoCategorias() {
+        // Agrupa produtos por categoria
+        const produtosPorCategoria = {};
+        this.data.produtos.forEach(produto => {
+            const categoria = produto.categoria || 'Sem categoria';
+            produtosPorCategoria[categoria] = (produtosPorCategoria[categoria] || 0) + 1;
+        });
+        
+        // Cria o gráfico de pizza
+        this.criarGraficoPizza('categorias-chart', {
+            labels: Object.keys(produtosPorCategoria),
+            datasets: [{
+                data: Object.values(produtosPorCategoria),
+                backgroundColor: [
+                    '#667eea',
+                    '#764ba2',
+                    '#f093fb',
+                    '#f5576c',
+                    '#4facfe',
+                    '#00f2fe'
+                ]
+            }]
+        });
+    }
 
-                atualizarGraficoClientesRegiao() {
-                    // Agrupa clientes por cidade
-                    const clientesPorCidade = {};
-                    this.data.clientes.forEach(cliente => {
-                        const cidade = cliente.cidade || 'Não informado';
-                        clientesPorCidade[cidade] = (clientesPorCidade[cidade] || 0) + 1;
-                    });
-                    
-                    // Cria o gráfico de barras
-                    this.criarGraficoBarras('clientes-regiao-chart', {
-                        labels: Object.keys(clientesPorCidade),
-                        datasets: [{
-                            label: 'Clientes',
-                            data: Object.values(clientesPorCidade),
-                            backgroundColor: 'rgba(102, 126, 234, 0.8)',
-                            borderColor: '#667eea',
-                            borderWidth: 2
-                        }]
-                    });
-                }
+    atualizarGraficoClientesRegiao() {
+        // Agrupa clientes por cidade
+        const clientesPorCidade = {};
+        this.data.clientes.forEach(cliente => {
+            const cidade = cliente.cidade || 'Não informado';
+            clientesPorCidade[cidade] = (clientesPorCidade[cidade] || 0) + 1;
+        });
+        
+        // Cria o gráfico de barras
+        this.criarGraficoBarras('clientes-regiao-chart', {
+            labels: Object.keys(clientesPorCidade),
+            datasets: [{
+                label: 'Clientes',
+                data: Object.values(clientesPorCidade),
+                backgroundColor: 'rgba(102, 126, 234, 0.8)',
+                borderColor: '#667eea',
+                borderWidth: 2
+            }]
+        });
+    }
 
-                atualizarTopProdutos() {
-                    const container = document.getElementById('top-produtos');
-                    if (!container) return;
-                    
-                    // Calcula vendas por produto
-                    const vendasPorProduto = {};
-                    this.data.vendas.forEach(venda => {
-                        const produto = venda.produto;
-                        if (!vendasPorProduto[produto]) {
-                            vendasPorProduto[produto] = { quantidade: 0, receita: 0 };
-                        }
-                        vendasPorProduto[produto].quantidade += venda.quantidade || 1;
-                        vendasPorProduto[produto].receita += venda.valor || 0;
-                    });
-                    
-                    // Ordena por quantidade vendida
-                    const topProdutos = Object.entries(vendasPorProduto)
-                        .sort(([,a], [,b]) => b.quantidade - a.quantidade)
-                        .slice(0, 5);
-                    
-                    container.innerHTML = topProdutos.map(([produto, stats]) => `
-                        <div class="product-item">
-                            <div class="product-info">
-                                <div class="product-name">${produto}</div>
-                                <div class="product-category">${this.getCategoriaProduto(produto)}</div>
-                            </div>
-                            <div class="product-stats">
-                                <div class="product-sales">${stats.quantidade}</div>
-                                <div class="product-revenue">R$ ${stats.receita.toFixed(2)}</div>
-                            </div>
-                        </div>
-                    `).join('');
-                }
+    atualizarTopProdutos() {
+        const container = document.getElementById('top-produtos');
+        if (!container) return;
+        
+        // Calcula vendas por produto
+        const vendasPorProduto = {};
+        this.data.vendas.forEach(venda => {
+            const produto = venda.produto;
+            if (!vendasPorProduto[produto]) {
+                vendasPorProduto[produto] = { quantidade: 0, receita: 0 };
+            }
+            vendasPorProduto[produto].quantidade += venda.quantidade || 1;
+            vendasPorProduto[produto].receita += venda.valor || 0;
+        });
+        
+        // Ordena por quantidade vendida
+        const topProdutos = Object.entries(vendasPorProduto)
+            .sort(([,a], [,b]) => b.quantidade - a.quantidade)
+            .slice(0, 5);
+        
+        container.innerHTML = topProdutos.map(([produto, stats]) => `
+            <div class="product-item">
+                <div class="product-info">
+                    <div class="product-name">${produto}</div>
+                    <div class="product-category">${this.getCategoriaProduto(produto)}</div>
+                </div>
+                <div class="product-stats">
+                    <div class="product-sales">${stats.quantidade}</div>
+                    <div class="product-revenue">R$ ${stats.receita.toFixed(2)}</div>
+                </div>
+            </div>
+        `).join('');
+    }
 
-                atualizarEstoqueCritico() {
-                    const container = document.getElementById('estoque-critico');
-                    if (!container) return;
-                    
-                    // Filtra produtos com estoque baixo
-                    const estoqueCritico = this.data.produtos.filter(produto => {
-                        const estoque = produto.estoque || 0;
-                        const minimo = produto.estoque_minimo || 0;
-                        return estoque <= minimo;
-                    }).slice(0, 5);
-                    
-                    container.innerHTML = estoqueCritico.map(produto => `
-                        <div class="stock-item">
-                            <div class="stock-info">
-                                <div class="stock-product">${produto.nome}</div>
-                                <div class="stock-details">${produto.categoria || 'Sem categoria'}</div>
-                            </div>
-                            <div class="stock-status">
-                                <div class="stock-quantity">${produto.estoque || 0}</div>
-                                <div class="stock-minimum">Mín: ${produto.estoque_minimo || 0}</div>
-                            </div>
-                        </div>
-                    `).join('');
-                }
+    atualizarEstoqueCritico() {
+        const container = document.getElementById('estoque-critico');
+        if (!container) return;
+        
+        // Filtra produtos com estoque baixo
+        const estoqueCritico = this.data.produtos.filter(produto => {
+            const estoque = produto.estoque || 0;
+            const minimo = produto.estoque_minimo || 0;
+            return estoque <= minimo;
+        }).slice(0, 5);
+        
+        container.innerHTML = estoqueCritico.map(produto => `
+            <div class="stock-item">
+                <div class="stock-info">
+                    <div class="stock-product">${produto.nome}</div>
+                    <div class="stock-details">${produto.categoria || 'Sem categoria'}</div>
+                </div>
+                <div class="stock-status">
+                    <div class="stock-quantity">${produto.estoque || 0}</div>
+                    <div class="stock-minimum">Mín: ${produto.estoque_minimo || 0}</div>
+                </div>
+            </div>
+        `).join('');
+    }
 
-                atualizarMetricasPerformance() {
-                    // Taxa de conversão (clientes que fizeram compra)
-                    const totalClientes = this.data.clientes.length;
-                    const clientesComCompra = new Set(this.data.vendas.map(v => v.cliente)).size;
-                    const taxaConversao = totalClientes > 0 ? (clientesComCompra / totalClientes * 100) : 0;
-                    const taxaConversaoElement = document.getElementById('taxa-conversao');
-                    if (taxaConversaoElement) taxaConversaoElement.textContent = `${taxaConversao.toFixed(1)}%`;
-                    
-                    // Ticket médio
-                    const totalVendas = this.data.vendas.length;
-                    const receitaTotal = this.data.vendas.reduce((total, v) => total + (v.valor || 0), 0);
-                    const ticketMedio = totalVendas > 0 ? receitaTotal / totalVendas : 0;
-                    const ticketMedioElement = document.getElementById('ticket-medio');
-                    if (ticketMedioElement) ticketMedioElement.textContent = `R$ ${ticketMedio.toFixed(2)}`;
-                    
-                    // Produtividade (vendas por dia útil)
-                    const diasUteis = this.calcularDiasUteis();
-                    const produtividade = diasUteis > 0 ? (totalVendas / diasUteis) : 0;
-                    const produtividadeElement = document.getElementById('produtividade');
-                    if (produtividadeElement) produtividadeElement.textContent = `${produtividade.toFixed(1)} vendas/dia`;
-                }
+    atualizarMetricasPerformance() {
+        // Taxa de conversão (clientes que fizeram compra)
+        const totalClientes = this.data.clientes.length;
+        const clientesComCompra = new Set(this.data.vendas.map(v => v.cliente)).size;
+        const taxaConversao = totalClientes > 0 ? (clientesComCompra / totalClientes * 100) : 0;
+        const taxaConversaoElement = document.getElementById('taxa-conversao');
+        if (taxaConversaoElement) taxaConversaoElement.textContent = `${taxaConversao.toFixed(1)}%`;
+        
+        // Ticket médio
+        const totalVendas = this.data.vendas.length;
+        const receitaTotal = this.data.vendas.reduce((total, v) => total + (v.valor || 0), 0);
+        const ticketMedio = totalVendas > 0 ? receitaTotal / totalVendas : 0;
+        const ticketMedioElement = document.getElementById('ticket-medio');
+        if (ticketMedioElement) ticketMedioElement.textContent = `R$ ${ticketMedio.toFixed(2)}`;
+        
+        // Produtividade (vendas por dia útil)
+        const diasUteis = this.calcularDiasUteis();
+        const produtividade = diasUteis > 0 ? (totalVendas / diasUteis) : 0;
+        const produtividadeElement = document.getElementById('produtividade');
+        if (produtividadeElement) produtividadeElement.textContent = `${produtividade.toFixed(1)} vendas/dia`;
+    }
 
-                preencherFiltros() {
-                    // Preenche filtro de categorias
-                    const filtroCategoria = document.getElementById('filtro-categoria');
-                    if (filtroCategoria) {
-                        const categorias = [...new Set(this.data.produtos.map(p => p.categoria).filter(Boolean))];
-                        filtroCategoria.innerHTML = '<option value="">Todas as categorias</option>' +
-                            categorias.map(cat => `<option value="${cat}">${cat}</option>`).join('');
-                    }
-                    
-                    // Preenche filtro de clientes
-                    const filtroCliente = document.getElementById('filtro-cliente');
-                    if (filtroCliente) {
-                        filtroCliente.innerHTML = '<option value="">Todos os clientes</option>' +
-                            this.data.clientes.map(cli => `<option value="${cli.nome}">${cli.nome}</option>`).join('');
-                    }
-                    
-                    // Define datas padrão (últimos 30 dias)
-                    const hoje = new Date();
-                    const inicio = new Date(hoje.getTime() - (30 * 24 * 60 * 60 * 1000));
-                    
-                    const dataInicio = document.getElementById('data-inicio');
-                    const dataFim = document.getElementById('data-fim');
-                    
-                    if (dataInicio) dataInicio.value = inicio.toISOString().split('T')[0];
-                    if (dataFim) dataFim.value = hoje.toISOString().split('T')[0];
-                }
+    preencherFiltros() {
+        // Preenche filtro de categorias
+        const filtroCategoria = document.getElementById('filtro-categoria');
+        if (filtroCategoria) {
+            const categorias = [...new Set(this.data.produtos.map(p => p.categoria).filter(Boolean))];
+            filtroCategoria.innerHTML = '<option value="">Todas as categorias</option>' +
+                categorias.map(cat => `<option value="${cat}">${cat}</option>`).join('');
+        }
+        
+        // Preenche filtro de clientes
+        const filtroCliente = document.getElementById('filtro-cliente');
+        if (filtroCliente) {
+            filtroCliente.innerHTML = '<option value="">Todos os clientes</option>' +
+                this.data.clientes.map(cli => `<option value="${cli.nome}">${cli.nome}</option>`).join('');
+        }
+        
+        // Define datas padrão (últimos 30 dias)
+        const hoje = new Date();
+        const inicio = new Date(hoje.getTime() - (30 * 24 * 60 * 60 * 1000));
+        
+        const dataInicio = document.getElementById('data-inicio');
+        const dataFim = document.getElementById('data-fim');
+        
+        if (dataInicio) dataInicio.value = inicio.toISOString().split('T')[0];
+        if (dataFim) dataFim.value = hoje.toISOString().split('T')[0];
+    }
 
-                aplicarFiltros() {
-                    const dataInicio = document.getElementById('data-inicio').value;
-                    const dataFim = document.getElementById('data-fim').value;
-                    const categoria = document.getElementById('filtro-categoria').value;
-                    const cliente = document.getElementById('filtro-cliente').value;
-                    
-                    // Aplica filtros aos dados
-                    let vendasFiltradas = this.data.vendas;
-                    
-                    if (dataInicio && dataFim) {
-                        const inicio = new Date(dataInicio);
-                        const fim = new Date(dataFim);
-                        vendasFiltradas = vendasFiltradas.filter(venda => {
-                            const dataVenda = new Date(venda.data);
-                            return dataVenda >= inicio && dataVenda <= fim;
-                        });
-                    }
-                    
-                    if (categoria) {
-                        vendasFiltradas = vendasFiltradas.filter(venda => {
-                            const produto = this.data.produtos.find(p => p.nome === venda.produto);
-                            return produto && produto.categoria === categoria;
-                        });
-                    }
-                    
-                    if (cliente) {
-                        vendasFiltradas = vendasFiltradas.filter(venda => venda.cliente === cliente);
-                    }
-                    
-                    // Atualiza relatórios com dados filtrados
-                    this.atualizarRelatoriosComFiltros(vendasFiltradas);
-                    
-                    this.showNotification('Filtros aplicados com sucesso!', 'success');
-                }
+    aplicarFiltros() {
+        const dataInicio = document.getElementById('data-inicio').value;
+        const dataFim = document.getElementById('data-fim').value;
+        const categoria = document.getElementById('filtro-categoria').value;
+        const cliente = document.getElementById('filtro-cliente').value;
+        
+        // Aplica filtros aos dados
+        let vendasFiltradas = this.data.vendas;
+        
+        if (dataInicio && dataFim) {
+            const inicio = new Date(dataInicio);
+            const fim = new Date(dataFim);
+            vendasFiltradas = vendasFiltradas.filter(venda => {
+                const dataVenda = new Date(venda.data);
+                return dataVenda >= inicio && dataVenda <= fim;
+            });
+        }
+        
+        if (categoria) {
+            vendasFiltradas = vendasFiltradas.filter(venda => {
+                const produto = this.data.produtos.find(p => p.nome === venda.produto);
+                return produto && produto.categoria === categoria;
+            });
+        }
+        
+        if (cliente) {
+            vendasFiltradas = vendasFiltradas.filter(venda => venda.cliente === cliente);
+        }
+        
+        // Atualiza relatórios com dados filtrados
+        this.atualizarRelatoriosComFiltros(vendasFiltradas);
+        
+        this.showNotification('Filtros aplicados com sucesso!', 'success');
+    }
 
-                limparFiltros() {
-                    const dataInicio = document.getElementById('data-inicio');
-                    const dataFim = document.getElementById('data-fim');
-                    const filtroCategoria = document.getElementById('filtro-categoria');
-                    const filtroCliente = document.getElementById('filtro-cliente');
-                    
-                    if (dataInicio) dataInicio.value = '';
-                    if (dataFim) dataFim.value = '';
-                    if (filtroCategoria) filtroCategoria.value = '';
-                    if (filtroCliente) filtroCliente.value = '';
-                    
-                    // Atualiza relatórios com dados completos
-                    this.updateRelatorios();
-                    
-                    this.showNotification('Filtros limpos!', 'info');
-                }
+    limparFiltros() {
+        const dataInicio = document.getElementById('data-inicio');
+        const dataFim = document.getElementById('data-fim');
+        const filtroCategoria = document.getElementById('filtro-categoria');
+        const filtroCliente = document.getElementById('filtro-cliente');
+        
+        if (dataInicio) dataInicio.value = '';
+        if (dataFim) dataFim.value = '';
+        if (filtroCategoria) filtroCategoria.value = '';
+        if (filtroCliente) filtroCliente.value = '';
+        
+        // Atualiza relatórios com dados completos
+        this.updateRelatorios();
+        
+        this.showNotification('Filtros limpos!', 'info');
+    }
 
-                // Funções auxiliares
-                getCategoriaProduto(nomeProduto) {
-                    const produto = this.data.produtos.find(p => p.nome === nomeProduto);
-                    return produto ? produto.categoria : 'Não encontrado';
-                }
+    // Função para atualizar relatórios com filtros aplicados
+    atualizarRelatoriosComFiltros(vendasFiltradas) {
+        console.log('📊 Atualizando relatórios com filtros aplicados...');
+        
+        // Atualiza resumo executivo com dados filtrados
+        this.atualizarResumoExecutivoComFiltros(vendasFiltradas);
+        
+        // Atualiza gráficos com dados filtrados
+        this.atualizarGraficoVendasComFiltros(vendasFiltradas);
+        
+        // Atualiza listas com dados filtrados
+        this.atualizarTopProdutosComFiltros(vendasFiltradas);
+        
+        console.log('📊 Relatórios com filtros atualizados com sucesso!');
+    }
 
-                calcularDiasUteis() {
-                    const hoje = new Date();
-                    const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
-                    let diasUteis = 0;
-                    
-                    for (let d = new Date(inicioMes); d <= hoje; d.setDate(d.getDate() + 1)) {
-                        if (d.getDay() !== 0 && d.getDay() !== 6) { // 0 = domingo, 6 = sábado
-                            diasUteis++;
-                        }
-                    }
-                    
-                    return diasUteis;
-                }
+    // Função para atualizar resumo executivo com filtros
+    atualizarResumoExecutivoComFiltros(vendasFiltradas) {
+        const totalVendas = vendasFiltradas.length;
+        const totalVendasElement = document.getElementById('total-vendas');
+        if (totalVendasElement) totalVendasElement.textContent = totalVendas;
+        
+        const receitaTotal = vendasFiltradas.reduce((total, venda) => total + (venda.valor || 0), 0);
+        const receitaTotalElement = document.getElementById('receita-total');
+        if (receitaTotalElement) receitaTotalElement.textContent = `R$ ${receitaTotal.toFixed(2)}`;
+        
+        // Mantém os outros valores como estão (clientes ativos e produtos em estoque)
+    }
 
-                // Funções para criar gráficos (simples, sem biblioteca externa)
-                criarGraficoLinha(canvasId, data) {
-                    const canvas = document.getElementById(canvasId);
-                    if (!canvas) return;
-                    
-                    // Define tamanho do canvas
-                    canvas.width = canvas.offsetWidth;
-                    canvas.height = canvas.offsetHeight;
-                    
-                    const ctx = canvas.getContext('2d');
-                    const width = canvas.width;
-                    const height = canvas.height;
-                    
-                    // Limpa o canvas
-                    ctx.clearRect(0, 0, width, height);
-                    
-                    // Desenha o gráfico
-                    this.desenharGraficoLinha(ctx, data, width, height);
-                }
+    // Função para atualizar gráfico de vendas com filtros
+    atualizarGraficoVendasComFiltros(vendasFiltradas) {
+        // Agrupa vendas filtradas por dia
+        const vendasPorDia = {};
+        vendasFiltradas.forEach(venda => {
+            const dataVenda = new Date(venda.data);
+            const dataStr = dataVenda.toISOString().split('T')[0];
+            vendasPorDia[dataStr] = (vendasPorDia[dataStr] || 0) + 1;
+        });
+        
+        // Cria o gráfico com dados filtrados
+        this.criarGraficoLinha('vendas-chart', {
+            labels: Object.keys(vendasPorDia),
+            datasets: [{
+                label: 'Vendas (Filtradas)',
+                data: Object.values(vendasPorDia),
+                borderColor: '#f5576c',
+                backgroundColor: 'rgba(245, 87, 108, 0.1)',
+                tension: 0.4
+            }]
+        });
+    }
 
-                criarGraficoPizza(canvasId, data) {
-                    const canvas = document.getElementById(canvasId);
-                    if (!canvas) return;
-                    
-                    // Define tamanho do canvas
-                    canvas.width = canvas.offsetWidth;
-                    canvas.height = canvas.offsetHeight;
-                    
-                    const ctx = canvas.getContext('2d');
-                    const width = canvas.width;
-                    const height = canvas.height;
-                    
-                    // Limpa o canvas
-                    ctx.clearRect(0, 0, width, height);
-                    
-                    // Desenha o gráfico
-                    this.desenharGraficoPizza(ctx, data, width, height);
-                }
+    // Função para atualizar top produtos com filtros
+    atualizarTopProdutosComFiltros(vendasFiltradas) {
+        const container = document.getElementById('top-produtos');
+        if (!container) return;
+        
+        // Calcula vendas por produto com dados filtrados
+        const vendasPorProduto = {};
+        vendasFiltradas.forEach(venda => {
+            const produto = venda.produto;
+            if (!vendasPorProduto[produto]) {
+                vendasPorProduto[produto] = { quantidade: 0, receita: 0 };
+            }
+            vendasPorProduto[produto].quantidade += venda.quantidade || 1;
+            vendasPorProduto[produto].receita += venda.valor || 0;
+        });
+        
+        // Ordena por quantidade vendida
+        const topProdutos = Object.entries(vendasPorProduto)
+            .sort(([,a], [,b]) => b.quantidade - a.quantidade)
+            .slice(0, 5);
+        
+        container.innerHTML = topProdutos.map(([produto, stats]) => `
+            <div class="product-item">
+                <div class="product-info">
+                    <div class="product-name">${produto}</div>
+                    <div class="product-category">${this.getCategoriaProduto(produto)}</div>
+                </div>
+                <div class="product-stats">
+                    <div class="product-sales">${stats.quantidade}</div>
+                    <div class="product-revenue">R$ ${stats.receita.toFixed(2)}</div>
+                </div>
+            </div>
+        `).join('');
+    }
 
-                criarGraficoBarras(canvasId, data) {
-                    const canvas = document.getElementById(canvasId);
-                    if (!canvas) return;
-                    
-                    // Define tamanho do canvas
-                    canvas.width = canvas.offsetWidth;
-                    canvas.height = canvas.offsetHeight;
-                    
-                    const ctx = canvas.getContext('2d');
-                    const width = canvas.width;
-                    const height = canvas.height;
-                    
-                    // Limpa o canvas
-                    ctx.clearRect(0, 0, width, height);
-                    
-                    // Desenha o gráfico
-                    this.desenharGraficoBarras(ctx, data, width, height);
-                }
+    // Funções auxiliares
+    getCategoriaProduto(nomeProduto) {
+        const produto = this.data.produtos.find(p => p.nome === nomeProduto);
+        return produto ? produto.categoria : 'Não encontrado';
+    }
 
-                // Funções de desenho dos gráficos
-                desenharGraficoLinha(ctx, data, width, height) {
-                    const { labels, datasets } = data;
-                    const dataset = datasets[0];
-                    
-                    if (labels.length === 0) return;
-                    
-                    const padding = 40;
-                    const chartWidth = width - 2 * padding;
-                    const chartHeight = height - 2 * padding;
-                    
-                    // Encontra valores máximo e mínimo
-                    const maxValue = Math.max(...dataset.data);
-                    const minValue = Math.min(...dataset.data);
-                    const range = maxValue - minValue || 1;
-                    
-                    // Desenha linhas de grade
-                    ctx.strokeStyle = '#e2e8f0';
-                    ctx.lineWidth = 1;
-                    
-                    // Linhas horizontais
-                    for (let i = 0; i <= 5; i++) {
-                        const y = padding + (i * chartHeight / 5);
-                        ctx.beginPath();
-                        ctx.moveTo(padding, y);
-                        ctx.lineTo(width - padding, y);
-                        ctx.stroke();
-                    }
-                    
-                    // Desenha a linha do gráfico
-                    ctx.strokeStyle = dataset.borderColor;
-                    ctx.lineWidth = 3;
-                    ctx.beginPath();
-                    
-                    labels.forEach((label, index) => {
-                        const x = padding + (index * chartWidth / (labels.length - 1));
-                        const y = padding + chartHeight - ((dataset.data[index] - minValue) / range * chartHeight);
-                        
-                        if (index === 0) {
-                            ctx.moveTo(x, y);
-                        } else {
-                            ctx.lineTo(x, y);
-                        }
-                    });
-                    
-                    ctx.stroke();
-                    
-                    // Desenha pontos
-                    ctx.fillStyle = dataset.backgroundColor;
-                    labels.forEach((label, index) => {
-                        const x = padding + (index * chartWidth / (labels.length - 1));
-                        const y = padding + chartHeight - ((dataset.data[index] - minValue) / range * chartHeight);
-                        
-                        ctx.beginPath();
-                        ctx.arc(x, y, 4, 0, 2 * Math.PI);
-                        ctx.fill();
-                    });
-                }
+    calcularDiasUteis() {
+        const hoje = new Date();
+        const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+        let diasUteis = 0;
+        
+        for (let d = new Date(inicioMes); d <= hoje; d.setDate(d.getDate() + 1)) {
+            if (d.getDay() !== 0 && d.getDay() !== 6) { // 0 = domingo, 6 = sábado
+                diasUteis++;
+            }
+        }
+        
+        return diasUteis;
+    }
 
-                desenharGraficoPizza(ctx, data, width, height) {
-                    const { labels, datasets } = data;
-                    const dataset = datasets[0];
-                    
-                    if (labels.length === 0) return;
-                    
-                    const centerX = width / 2;
-                    const centerY = height / 2;
-                    const radius = Math.min(width, height) / 3;
-                    
-                    const total = dataset.data.reduce((sum, value) => sum + value, 0);
-                    let currentAngle = -Math.PI / 2; // Começa do topo
-                    
-                    labels.forEach((label, index) => {
-                        const value = dataset.data[index];
-                        const sliceAngle = (value / total) * 2 * Math.PI;
-                        
-                        // Desenha a fatia
-                        ctx.fillStyle = dataset.backgroundColor[index % dataset.backgroundColor.length];
-                        ctx.beginPath();
-                        ctx.moveTo(centerX, centerY);
-                        ctx.arc(centerX, centerY, radius, currentAngle, currentAngle + sliceAngle);
-                        ctx.closePath();
-                        ctx.fill();
-                        
-                        currentAngle += sliceAngle;
-                    });
-                }
+    // Funções para criar gráficos (simples, sem biblioteca externa)
+    criarGraficoLinha(canvasId, data) {
+        const canvas = document.getElementById(canvasId);
+        if (!canvas) return;
+        
+        // Define tamanho do canvas
+        canvas.width = canvas.offsetWidth;
+        canvas.height = canvas.offsetHeight;
+        
+        const ctx = canvas.getContext('2d');
+        const width = canvas.width;
+        const height = canvas.height;
+        
+        // Limpa o canvas
+        ctx.clearRect(0, 0, width, height);
+        
+        // Desenha o gráfico
+        this.desenharGraficoLinha(ctx, data, width, height);
+    }
 
-                desenharGraficoBarras(ctx, data, width, height) {
-                    const { labels, datasets } = data;
-                    const dataset = datasets[0];
-                    
-                    if (labels.length === 0) return;
-                    
-                    const padding = 60;
-                    const chartWidth = width - 2 * padding;
-                    const chartHeight = height - 2 * padding;
-                    const barWidth = chartWidth / labels.length * 0.8;
-                    const barSpacing = chartWidth / labels.length * 0.2;
-                    
-                    // Encontra valor máximo
-                    const maxValue = Math.max(...dataset.data);
-                    
-                    // Desenha barras
-                    labels.forEach((label, index) => {
-                        const value = dataset.data[index];
-                        const barHeight = (value / maxValue) * chartHeight;
-                        const x = padding + index * (chartWidth / labels.length) + barSpacing / 2;
-                        const y = padding + chartHeight - barHeight;
-                        
-                        // Desenha a barra
-                        ctx.fillStyle = dataset.backgroundColor;
-                        ctx.fillRect(x, y, barWidth, barHeight);
-                        
-                        // Borda da barra
-                        ctx.strokeStyle = dataset.borderColor;
-                        ctx.lineWidth = dataset.borderWidth;
-                        ctx.strokeRect(x, y, barWidth, barHeight);
-                    });
-                }
+    criarGraficoPizza(canvasId, data) {
+        const canvas = document.getElementById(canvasId);
+        if (!canvas) return;
+        
+        // Define tamanho do canvas
+        canvas.width = canvas.offsetWidth;
+        canvas.height = canvas.offsetHeight;
+        
+        const ctx = canvas.getContext('2d');
+        const width = canvas.width;
+        const height = canvas.height;
+        
+        // Limpa o canvas
+        ctx.clearRect(0, 0, width, height);
+        
+        // Desenha o gráfico
+        this.desenharGraficoPizza(ctx, data, width, height);
+    }
 
-                exportarRelatorios() {
-                    // Simula exportação de PDF
-                    this.showNotification('Exportando relatórios para PDF...', 'info');
-                    
-                    setTimeout(() => {
-                        this.showNotification('Relatórios exportados com sucesso!', 'success');
-                    }, 2000);
-                }
+    criarGraficoBarras(canvasId, data) {
+        const canvas = document.getElementById(canvasId);
+        if (!canvas) return;
+        
+        // Define tamanho do canvas
+        canvas.width = canvas.offsetWidth;
+        canvas.height = canvas.offsetHeight;
+        
+        const ctx = canvas.getContext('2d');
+        const width = canvas.width;
+        const height = canvas.height;
+        
+        // Limpa o canvas
+        ctx.clearRect(0, 0, width, height);
+        
+        // Desenha o gráfico
+        this.desenharGraficoBarras(ctx, data, width, height);
+    }
 
-                // FUNÇÕES DE PERSISTÊNCIA DE DADOS
-                salvarProdutos() {
-                    localStorage.setItem('produtos', JSON.stringify(this.data.produtos));
-                }
+    // Funções de desenho dos gráficos
+    desenharGraficoLinha(ctx, data, width, height) {
+        const { labels, datasets } = data;
+        const dataset = datasets[0];
+        
+        if (labels.length === 0) return;
+        
+        const padding = 40;
+        const chartWidth = width - 2 * padding;
+        const chartHeight = height - 2 * padding;
+        
+        // Encontra valores máximo e mínimo
+        const maxValue = Math.max(...dataset.data);
+        const minValue = Math.min(...dataset.data);
+        const range = maxValue - minValue || 1;
+        
+        // Desenha linhas de grade
+        ctx.strokeStyle = '#e2e8f0';
+        ctx.lineWidth = 1;
+        
+        // Linhas horizontais
+        for (let i = 0; i <= 5; i++) {
+            const y = padding + (i * chartHeight / 5);
+            ctx.beginPath();
+            ctx.moveTo(padding, y);
+            ctx.lineTo(width - padding, y);
+            ctx.stroke();
+        }
+        
+        // Desenha a linha do gráfico
+        ctx.strokeStyle = dataset.borderColor;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        
+        labels.forEach((label, index) => {
+            const x = padding + (index * chartWidth / (labels.length - 1));
+            const y = padding + chartHeight - ((dataset.data[index] - minValue) / range * chartHeight);
+            
+            if (index === 0) {
+                ctx.moveTo(x, y);
+            } else {
+                ctx.lineTo(x, y);
+            }
+        });
+        
+        ctx.stroke();
+        
+        // Desenha pontos
+        ctx.fillStyle = dataset.backgroundColor;
+        labels.forEach((label, index) => {
+            const x = padding + (index * chartWidth / (labels.length - 1));
+            const y = padding + chartHeight - ((dataset.data[index] - minValue) / range * chartHeight);
+            
+            ctx.beginPath();
+            ctx.arc(x, y, 4, 0, 2 * Math.PI);
+            ctx.fill();
+        });
+    }
 
-                salvarClientes() {
-                    localStorage.setItem('clientes', JSON.stringify(this.data.clientes));
-                }
+    desenharGraficoPizza(ctx, data, width, height) {
+        const { labels, datasets } = data;
+        const dataset = datasets[0];
+        
+        if (labels.length === 0) return;
+        
+        const centerX = width / 2;
+        const centerY = height / 2;
+        const radius = Math.min(width, height) / 3;
+        
+        const total = dataset.data.reduce((sum, value) => sum + value, 0);
+        let currentAngle = -Math.PI / 2; // Começa do topo
+        
+        labels.forEach((label, index) => {
+            const value = dataset.data[index];
+            const sliceAngle = (value / total) * 2 * Math.PI;
+            
+            // Desenha a fatia
+            ctx.fillStyle = dataset.backgroundColor[index % dataset.backgroundColor.length];
+            ctx.beginPath();
+            ctx.moveTo(centerX, centerY);
+            ctx.arc(centerX, centerY, radius, currentAngle, currentAngle + sliceAngle);
+            ctx.closePath();
+            ctx.fill();
+            
+            currentAngle += sliceAngle;
+        });
+    }
 
-                salvarCategorias() {
-                    localStorage.setItem('categorias', JSON.stringify(this.data.categorias));
-                }
+    desenharGraficoBarras(ctx, data, width, height) {
+        const { labels, datasets } = data;
+        const dataset = datasets[0];
+        
+        if (labels.length === 0) return;
+        
+        const padding = 60;
+        const chartWidth = width - 2 * padding;
+        const chartHeight = height - 2 * padding;
+        const barWidth = chartWidth / labels.length * 0.8;
+        const barSpacing = chartWidth / labels.length * 0.2;
+        
+        // Encontra valor máximo
+        const maxValue = Math.max(...dataset.data);
+        
+        // Desenha barras
+        labels.forEach((label, index) => {
+            const value = dataset.data[index];
+            const barHeight = (value / maxValue) * chartHeight;
+            const x = padding + index * (chartWidth / labels.length) + barSpacing / 2;
+            const y = padding + chartHeight - barHeight;
+            
+            // Desenha a barra
+            ctx.fillStyle = dataset.backgroundColor;
+            ctx.fillRect(x, y, barWidth, barHeight);
+            
+            // Borda da barra
+            ctx.strokeStyle = dataset.borderColor;
+            ctx.lineWidth = dataset.borderWidth;
+            ctx.strokeRect(x, y, barWidth, barHeight);
+        });
+    }
 
-                salvarVendas() {
-                    localStorage.setItem('vendas', JSON.stringify(this.data.vendas));
-                }
+    exportarRelatorios() {
+        // Simula exportação de PDF
+        this.showNotification('Exportando relatórios para PDF...', 'info');
+        
+        setTimeout(() => {
+            this.showNotification('Relatórios exportados com sucesso!', 'success');
+        }, 2000);
+    }
 
-                atualizarEstoque() {
-                    // Atualiza o estoque baseado nos produtos existentes
-                    this.data.estoque = this.data.produtos.map(p => ({
-                        id: p.id,
-                        produto: p.nome,
-                        quantidade: p.estoque || 0,
-                        minimo: p.estoque_minimo || 0,
-                        ativo: true
-                    }));
-                    
-                    // Salva o estoque atualizado
-                    localStorage.setItem('estoque', JSON.stringify(this.data.estoque));
-                    
-                    // Atualiza a tabela de estoque se estiver visível
-                    if (document.getElementById('estoque-table')) {
-                        this.updateTabelaEstoque();
-                    }
-                    
-                    console.log('📦 Estoque atualizado:', this.data.estoque);
-                }
+    // FUNÇÕES DE PERSISTÊNCIA DE DADOS
+    salvarProdutos() {
+        localStorage.setItem('produtos', JSON.stringify(this.data.produtos));
+    }
 
-                // FUNÇÕES DE CRUD COMPLETAS
-                adicionarProduto(produto) {
-                    produto.id = this.gerarId();
-                    this.data.produtos.push(produto);
-                    this.atualizarEstoque();
-                    this.salvarProdutos();
-                    this.showNotification('Produto adicionado com sucesso!', 'success');
-                    this.updateTabelaProdutos();
-                    this.updateDashboard();
-                }
+    salvarClientes() {
+        localStorage.setItem('clientes', JSON.stringify(this.data.clientes));
+    }
 
-                editarProduto(id) {
-                    const produto = this.data.produtos.find(p => p.id == id);
-                    if (produto) {
-                        this.preencherModalProduto(produto);
-                        this.showModal('add-product-modal');
-                        this.showNotification('Editando produto...', 'info');
-                    }
-                }
+    salvarCategorias() {
+        localStorage.setItem('categorias', JSON.stringify(this.data.categorias));
+    }
 
-                atualizarProduto(id, dados) {
-                    const index = this.data.produtos.findIndex(p => p.id == id);
-                    if (index !== -1) {
-                        this.data.produtos[index] = { ...this.data.produtos[index], ...dados };
-                        this.atualizarEstoque();
-                        this.salvarProdutos();
-                        this.showNotification('Produto atualizado com sucesso!', 'success');
-                        this.updateTabelaProdutos();
-                        this.updateDashboard();
-                    }
-                }
+    salvarVendas() {
+        localStorage.setItem('vendas', JSON.stringify(this.data.vendas));
+    }
 
-                excluirProduto(id) {
-                    if (confirm('Tem certeza que deseja excluir este produto?')) {
-                        this.data.produtos = this.data.produtos.filter(p => p.id != id);
-                        this.atualizarEstoque();
-                        this.salvarProdutos();
-                        this.showNotification('Produto excluído com sucesso', 'success');
-                        this.updateTabelaProdutos();
-                        this.updateDashboard();
-                    }
-                }
+    atualizarEstoque() {
+        // Só atualiza o estoque se não estiver conectado ao Supabase
+        if (this.isConnected && this.supabase) {
+            console.log('📦 Conectado ao Supabase, não é necessário atualizar estoque localmente');
+            return;
+        }
+        
+        console.log('📦 Atualizando estoque local...');
+        // Atualiza o estoque baseado nos produtos existentes
+        this.data.estoque = this.data.produtos.map(p => ({
+            id: p.id,
+            produto: p.nome,
+            quantidade: p.estoque || 0,
+            minimo: p.estoque_minimo || 0,
+            ativo: true
+        }));
+        
+        // Salva o estoque atualizado
+        localStorage.setItem('estoque', JSON.stringify(this.data.estoque));
+        
+        // Atualiza a tabela de estoque se estiver visível
+        if (document.getElementById('estoque-table')) {
+            this.updateTabelaEstoque();
+        }
+        
+        console.log('📦 Estoque local atualizado:', this.data.estoque);
+    }
 
-                adicionarCliente(cliente) {
-                    cliente.id = this.gerarId();
-                    this.data.clientes.push(cliente);
-                    this.salvarClientes();
-                    this.showNotification('Cliente adicionado com sucesso!', 'success');
-                    this.updateTabelaClientes();
-                    this.updateDashboard();
-                }
+    // FUNÇÕES DE CRUD COMPLETAS
+    adicionarProduto(produto) {
+        produto.id = this.gerarId();
+        this.data.produtos.push(produto);
+        this.atualizarEstoque();
+        this.salvarProdutos();
+        this.showNotification('Produto adicionado com sucesso!', 'success');
+        this.updateTabelaProdutos();
+        this.updateDashboard();
+    }
 
-                atualizarCliente(id, dados) {
-                    const index = this.data.clientes.findIndex(c => c.id == id);
-                    if (index !== -1) {
-                        this.data.clientes[index] = { ...this.data.clientes[index], ...dados };
-                        this.salvarClientes();
-                        this.showNotification('Cliente atualizado com sucesso!', 'success');
-                        this.updateTabelaClientes();
-                        this.updateDashboard();
-                    }
-                }
+    editarProduto(id) {
+        const produto = this.data.produtos.find(p => p.id == id);
+        if (produto) {
+            this.preencherModalProduto(produto);
+            this.showModal('add-product-modal');
+            this.showNotification('Editando produto...', 'info');
+        }
+    }
 
-                excluirCliente(id) {
-                    if (confirm('Tem certeza que deseja excluir este cliente?')) {
-                        this.data.clientes = this.data.clientes.filter(c => c.id != id);
-                        this.salvarClientes();
-                        this.showNotification('Cliente excluído com sucesso', 'success');
-                        this.updateTabelaClientes();
-                        this.updateDashboard();
-                    }
-                }
+    atualizarProduto(id, dados) {
+        const index = this.data.produtos.findIndex(p => p.id == id);
+        if (index !== -1) {
+            this.data.produtos[index] = { ...this.data.produtos[index], ...dados };
+            this.atualizarEstoque();
+            this.salvarProdutos();
+            this.showNotification('Produto atualizado com sucesso!', 'success');
+            this.updateTabelaProdutos();
+            this.updateDashboard();
+        }
+    }
 
-                adicionarCategoria(categoria) {
-                    categoria.id = this.gerarId();
-                    this.data.categorias.push(categoria);
-                    this.salvarCategorias();
-                    this.showNotification('Categoria adicionada com sucesso!', 'success');
-                    this.updateTabelaCategorias();
-                    this.updateDashboard();
-                }
+    excluirProduto(id) {
+        if (confirm('Tem certeza que deseja excluir este produto?')) {
+            this.data.produtos = this.data.produtos.filter(p => p.id != id);
+            this.atualizarEstoque();
+            this.salvarProdutos();
+            this.showNotification('Produto excluído com sucesso', 'success');
+            this.updateTabelaProdutos();
+            this.updateDashboard();
+        }
+    }
 
-                atualizarCategoria(id, dados) {
-                    const index = this.data.categorias.findIndex(c => c.id == id);
-                    if (index !== -1) {
-                        this.data.categorias[index] = { ...this.data.categorias[index], ...dados };
-                        this.salvarCategorias();
-                        this.showNotification('Categoria atualizada com sucesso!', 'success');
-                        this.updateTabelaCategorias();
-                        this.updateDashboard();
-                    }
-                }
+    adicionarCliente(cliente) {
+        cliente.id = this.gerarId();
+        this.data.clientes.push(cliente);
+        this.salvarClientes();
+        this.showNotification('Cliente adicionado com sucesso!', 'success');
+        this.updateTabelaClientes();
+        this.updateDashboard();
+    }
 
-                excluirCategoria(id) {
-                    if (confirm('Tem certeza que deseja excluir esta categoria?')) {
-                        this.data.categorias = this.data.categorias.filter(c => c.id != id);
-                        this.salvarCategorias();
-                        this.showNotification('Categoria excluída com sucesso', 'success');
-                        this.updateTabelaCategorias();
-                        this.updateDashboard();
-                    }
-                }
+    atualizarCliente(id, dados) {
+        const index = this.data.clientes.findIndex(c => c.id == id);
+        if (index !== -1) {
+            this.data.clientes[index] = { ...this.data.clientes[index], ...dados };
+            this.salvarClientes();
+            this.showNotification('Cliente atualizado com sucesso!', 'success');
+            this.updateTabelaClientes();
+            this.updateDashboard();
+        }
+    }
 
-                adicionarVenda(venda) {
-                    venda.id = this.gerarId();
-                    venda.data = new Date().toLocaleDateString();
-                    this.data.vendas.push(venda);
-                    this.salvarVendas();
-                    
-                    // Atualiza estoque do produto
-                    const produto = this.data.produtos.find(p => p.nome === venda.produto);
-                    if (produto) {
-                        produto.estoque -= venda.quantidade;
-                        this.atualizarEstoque();
-                        this.salvarProdutos();
-                    }
-                    
-                    this.showNotification('Venda registrada com sucesso!', 'success');
-                    this.updateTabelaVendas();
-                    this.updateDashboard();
-                }
+    excluirCliente(id) {
+        if (confirm('Tem certeza que deseja excluir este cliente?')) {
+            this.data.clientes = this.data.clientes.filter(c => c.id != id);
+            this.salvarClientes();
+            this.showNotification('Cliente excluído com sucesso', 'success');
+            this.updateTabelaClientes();
+            this.updateDashboard();
+        }
+    }
 
-                ajustarEstoque(id) {
-                    const produto = this.data.produtos.find(p => p.id == id);
-                    if (produto) {
-                        this.preencherModalEstoque(produto);
-                        this.showModal('adjust-stock-modal');
-                        this.showNotification('Ajustando estoque...', 'info');
-                    }
-                }
+    adicionarCategoria(categoria) {
+        categoria.id = this.gerarId();
+        this.data.categorias.push(categoria);
+        this.salvarCategorias();
+        this.showNotification('Categoria adicionada com sucesso!', 'success');
+        this.updateTabelaCategorias();
+        this.updateDashboard();
+    }
 
-                aplicarAjusteEstoque(id, quantidade, tipo, observacao) {
-                    const produto = this.data.produtos.find(p => p.id == id);
-                    if (produto) {
-                        if (tipo === 'entrada') {
-                            produto.estoque += parseInt(quantidade);
-                        } else {
-                            produto.estoque -= parseInt(quantidade);
-                        }
-                        
-                        this.atualizarEstoque();
-                        this.salvarProdutos();
-                        this.showNotification('Estoque ajustado com sucesso!', 'success');
-                        this.updateTabelaProdutos();
-                        this.updateTabelaEstoque();
-                        this.updateDashboard();
-                    }
-                }
+    atualizarCategoria(id, dados) {
+        const index = this.data.categorias.findIndex(c => c.id == id);
+        if (index !== -1) {
+            this.data.categorias[index] = { ...this.data.categorias[index], ...dados };
+            this.salvarCategorias();
+            this.showNotification('Categoria atualizada com sucesso!', 'success');
+            this.updateTabelaCategorias();
+            this.updateDashboard();
+        }
+    }
 
-                // UTILIDADES
-                gerarId() {
-                    return Date.now() + Math.random().toString(36).substr(2, 9);
-                }
+    excluirCategoria(id) {
+        if (confirm('Tem certeza que deseja excluir esta categoria?')) {
+            this.data.categorias = this.data.categorias.filter(c => c.id != id);
+            this.salvarCategorias();
+            this.showNotification('Categoria excluída com sucesso', 'success');
+            this.updateTabelaCategorias();
+            this.updateDashboard();
+        }
+    }
 
-                preencherModalProduto(produto) {
-                    document.getElementById('product-name').value = produto.nome || '';
-                    document.getElementById('product-category').value = produto.categoria || '';
-                    document.getElementById('product-price').value = produto.preco || '';
-                    document.getElementById('product-stock').value = produto.estoque || '';
-                    document.getElementById('product-min-stock').value = produto.estoque_minimo || '';
-                    
-                    // Salva o ID do produto sendo editado
-                    document.getElementById('add-product-modal').setAttribute('data-edit-id', produto.id);
-                }
+    adicionarVenda(venda) {
+        venda.id = this.gerarId();
+        venda.data = new Date().toLocaleDateString();
+        this.data.vendas.push(venda);
+        this.salvarVendas();
+        
+        // Atualiza estoque do produto
+        const produto = this.data.produtos.find(p => p.nome === venda.produto);
+        if (produto) {
+            produto.estoque -= venda.quantidade;
+            this.atualizarEstoque();
+            this.salvarProdutos();
+        }
+        
+        this.showNotification('Venda registrada com sucesso!', 'success');
+        this.updateTabelaVendas();
+        this.updateDashboard();
+    }
 
-                preencherModalEstoque(produto) {
-                    document.getElementById('stock-product').value = produto.nome;
-                    document.getElementById('stock-product').disabled = true;
-                    document.getElementById('stock-quantity').value = '';
-                    document.getElementById('stock-type').value = 'entrada';
-                    document.getElementById('stock-observation').value = '';
-                    
-                    // Salva o ID do produto
-                    document.getElementById('adjust-stock-modal').setAttribute('data-edit-id', produto.id);
-                }
+    ajustarEstoque(id) {
+        const produto = this.data.produtos.find(p => p.id == id);
+        if (produto) {
+            this.preencherModalEstoque(produto);
+            this.showModal('adjust-stock-modal');
+            this.showNotification('Ajustando estoque...', 'info');
+        }
+    }
 
-                preencherModalCliente(cliente) {
-                    document.getElementById('client-name').value = cliente.nome || '';
-                    document.getElementById('client-email').value = cliente.email || '';
-                    document.getElementById('client-phone').value = cliente.telefone || '';
-                    document.getElementById('client-city').value = cliente.cidade || '';
-                    
-                    document.getElementById('add-client-modal').setAttribute('data-edit-id', cliente.id);
-                }
+    aplicarAjusteEstoque(id, quantidade, tipo, observacao) {
+        const produto = this.data.produtos.find(p => p.id == id);
+        if (produto) {
+            if (tipo === 'entrada') {
+                produto.estoque += parseInt(quantidade);
+            } else {
+                produto.estoque -= parseInt(quantidade);
+            }
+            
+            this.atualizarEstoque();
+            this.salvarProdutos();
+            this.showNotification('Estoque ajustado com sucesso!', 'success');
+            this.updateTabelaProdutos();
+            this.updateTabelaEstoque();
+            this.updateDashboard();
+        }
+    }
 
-                preencherModalCategoria(categoria) {
-                    document.getElementById('category-name').value = categoria.nome || '';
-                    document.getElementById('category-description').value = categoria.descricao || '';
-                    document.getElementById('category-observations').value = categoria.observacoes || '';
-                    
-                    document.getElementById('add-category-modal').setAttribute('data-edit-id', categoria.id);
-                }
+    // UTILIDADES
+    gerarId() {
+        return Date.now() + Math.random().toString(36).substr(2, 9);
+    }
 
-                preencherModalVenda(produto) {
-                    document.getElementById('sale-product').value = produto.nome;
-                    document.getElementById('sale-product').disabled = true;
-                    document.getElementById('sale-price').value = produto.preco;
-                    document.getElementById('sale-quantity').value = '1';
-                    
-                    // Preenche select de clientes
-                    const selectCliente = document.getElementById('sale-client');
-                    selectCliente.innerHTML = '<option value="">Selecione um cliente</option>';
-                    this.data.clientes.forEach(cliente => {
-                        const option = document.createElement('option');
-                        option.value = cliente.nome;
-                        option.textContent = cliente.nome;
-                        selectCliente.appendChild(option);
-                    });
-                }
+    preencherModalProduto(produto) {
+        document.getElementById('product-name').value = produto.nome || '';
+        document.getElementById('product-category').value = produto.categoria || '';
+        document.getElementById('product-price').value = produto.preco || '';
+        document.getElementById('product-stock').value = produto.estoque || '';
+        document.getElementById('product-min-stock').value = produto.estoque_minimo || '';
+        
+        // Salva o ID do produto sendo editado
+        document.getElementById('add-product-modal').setAttribute('data-edit-id', produto.id);
+    }
+
+    preencherModalEstoque(produto) {
+        document.getElementById('stock-product').value = produto.nome;
+        document.getElementById('stock-product').disabled = true;
+        document.getElementById('stock-quantity').value = '';
+        document.getElementById('stock-type').value = 'entrada';
+        document.getElementById('stock-observation').value = '';
+        
+        // Salva o ID do produto
+        document.getElementById('adjust-stock-modal').setAttribute('data-edit-id', produto.id);
+    }
+
+    preencherModalCliente(cliente) {
+        document.getElementById('client-name').value = cliente.nome || '';
+        document.getElementById('client-email').value = cliente.email || '';
+        document.getElementById('client-phone').value = cliente.telefone || '';
+        document.getElementById('client-city').value = cliente.cidade || '';
+        
+        document.getElementById('add-client-modal').setAttribute('data-edit-id', cliente.id);
+    }
+
+    preencherModalCategoria(categoria) {
+        document.getElementById('category-name').value = categoria.nome || '';
+        document.getElementById('category-description').value = categoria.descricao || '';
+        document.getElementById('category-observations').value = categoria.observacoes || '';
+        
+        document.getElementById('add-category-modal').setAttribute('data-edit-id', categoria.id);
+    }
+
+    preencherModalVenda(produto) {
+        document.getElementById('sale-product').value = produto.nome;
+        document.getElementById('sale-product').disabled = true;
+        document.getElementById('sale-price').value = produto.preco;
+        document.getElementById('sale-quantity').value = '1';
+        
+        // Preenche select de clientes
+        const selectCliente = document.getElementById('sale-client');
+        selectCliente.innerHTML = '<option value="">Selecione um cliente</option>';
+        this.data.clientes.forEach(cliente => {
+            const option = document.createElement('option');
+            option.value = cliente.nome;
+            option.textContent = cliente.nome;
+            selectCliente.appendChild(option);
+        });
+    }
 
     // NOTIFICAÇÕES
     showNotification(message, type = 'info') {
@@ -1929,28 +2085,91 @@ class SistemaEmpresarial {
         }
     }
 
-                    loadTheme() {
-                    if (localStorage.getItem('darkTheme') === 'true') {
-                        document.body.classList.add('dark-theme');
-                        this.updateThemeButton();
-                    }
-                }
+    // Função para carregar tema
+    loadTheme() {
+        if (localStorage.getItem('darkTheme') === 'true') {
+            document.body.classList.add('dark-theme');
+            this.updateThemeButton();
+        }
+    }
 
-                toggleTheme() {
-                    document.body.classList.toggle('dark-theme');
-                    const isDark = document.body.classList.contains('dark-theme');
-                    localStorage.setItem('darkTheme', isDark);
-                    this.updateThemeButton();
-                }
+    // Função para alternar tema
+    toggleTheme() {
+        document.body.classList.toggle('dark-theme');
+        const isDark = document.body.classList.contains('dark-theme');
+        localStorage.setItem('darkTheme', isDark);
+        this.updateThemeButton();
+    }
 
-                updateThemeButton() {
-                    const icon = document.querySelector('.btn-info i');
-                    if (icon) {
-                        icon.className = document.body.classList.contains('dark-theme')
-                            ? 'fas fa-sun'
-                            : 'fas fa-moon';
-                    }
-                }
+    // Função para atualizar botão de tema
+    updateThemeButton() {
+        const icon = document.querySelector('.btn-info i');
+        if (icon) {
+            icon.className = document.body.classList.contains('dark-theme')
+                ? 'fas fa-sun'
+                : 'fas fa-moon';
+        }
+    }
+
+    // Função para atualizar todas as tabelas
+    atualizarTodasTabelas() {
+        console.log('🔄 Atualizando todas as tabelas...');
+        
+        // Atualiza dashboard
+        this.updateDashboard();
+        
+        // Atualiza todas as tabelas principais
+        this.updateTabelaProdutos();
+        this.updateTabelaEstoque();
+        this.updateTabelaClientes();
+        this.updateTabelaVendas();
+        this.updateTabelaCategorias();
+        this.updateRelatorios();
+        
+        console.log('✅ Todas as tabelas foram atualizadas!');
+    }
+
+    // Função para forçar recarga dos dados do Supabase
+    async recarregarDadosSupabase() {
+        if (!this.isConnected || !this.supabase) {
+            console.warn('⚠️ Supabase não disponível');
+            return false;
+        }
+        
+        try {
+            console.log('🔄 Recarregando dados do Supabase...');
+            await this.loadAllData();
+            console.log('✅ Dados do Supabase recarregados com sucesso!');
+            return true;
+        } catch (error) {
+            console.error('❌ Erro ao recarregar dados do Supabase:', error);
+            return false;
+        }
+    }
+
+    // Função para verificar se os dados estão sincronizados
+    verificarSincronizacao() {
+        const estoqueLocal = localStorage.getItem('estoque');
+        const produtosLocal = localStorage.getItem('produtos');
+        
+        if (this.isConnected && this.supabase) {
+            console.log('🔗 Status da conexão Supabase:', this.isConnected);
+            console.log('📦 Dados de estoque carregados:', this.data.estoque.length);
+            console.log('📦 Dados de produtos carregados:', this.data.produtos.length);
+            
+            if (estoqueLocal) {
+                const estoqueLocalParsed = JSON.parse(estoqueLocal);
+                console.log('💾 Estoque no localStorage:', estoqueLocalParsed.length);
+            }
+            
+            if (produtosLocal) {
+                const produtosLocalParsed = JSON.parse(produtosLocal);
+                console.log('💾 Produtos no localStorage:', produtosLocalParsed.length);
+            }
+        } else {
+            console.log('📱 Modo local ativo');
+        }
+    }
 }
 
 // INICIALIZAÇÃO
