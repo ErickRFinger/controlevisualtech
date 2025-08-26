@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🔐 Login - Sistema Empresarial</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-card">
+            <div class="login-header">
+                <div class="logo">
+                    <img src="icon.ico" alt="Logo" class="logo-img">
+                    <h1>Sistema Empresarial</h1>
+                </div>
+                <p class="login-subtitle">Faça login para acessar o sistema</p>
+            </div>
+
+            <form class="login-form" id="loginForm">
+                <div class="form-group">
+                    <label for="username">
+                        <i class="fas fa-user"></i>
+                        Usuário
+                    </label>
+                    <input type="text" id="username" name="username" placeholder="Digite seu usuário" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="password">
+                        <i class="fas fa-lock"></i>
+                        Senha
+                    </label>
+                    <input type="password" id="password" name="password" placeholder="Digite sua senha" required>
+                </div>
+
+                <div class="form-options">
+                    <label class="checkbox-container">
+                        <input type="checkbox" id="remember" name="remember">
+                        <span class="checkmark"></span>
+                        Lembrar de mim
+                    </label>
+                    <a href="#" class="forgot-password">Esqueceu a senha?</a>
+                </div>
+
+                <button type="submit" class="btn btn-primary btn-login">
+                    <i class="fas fa-sign-in-alt"></i>
+                    Entrar no Sistema
+                </button>
+            </form>
+
+            <div class="login-footer">
+                <p>Usuário padrão: <strong>admin</strong> | Senha: <strong>admin</strong></p>
+                <div class="theme-toggle">
+                    <button class="btn btn-info btn-sm" onclick="toggleTheme()">
+                        <i class="fas fa-moon"></i>
+                        Modo Escuro
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Sistema de Login Simples
+        class SistemaLogin {
+            constructor() {
+                this.init();
+            }
+
+            init() {
+                this.setupForm();
+                this.checkAuth();
+                this.loadTheme();
+            }
+
+            setupForm() {
+                const form = document.getElementById('loginForm');
+                form.addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    this.handleLogin();
+                });
+            }
+
+            handleLogin() {
+                const username = document.getElementById('username').value;
+                const password = document.getElementById('password').value;
+                const remember = document.getElementById('remember').checked;
+
+                // Validação simples
+                if (username === 'admin' && password === 'admin') {
+                    this.loginSuccess(username, remember);
+                } else {
+                    this.showError('Usuário ou senha incorretos!');
+                }
+            }
+
+            loginSuccess(username, remember) {
+                // Salva autenticação
+                localStorage.setItem('isAuthenticated', 'true');
+                localStorage.setItem('username', username);
+                
+                if (remember) {
+                    localStorage.setItem('rememberUser', username);
+                }
+
+                this.showSuccess('Login realizado com sucesso! Redirecionando...');
+                
+                // Redireciona para o sistema
+                setTimeout(() => {
+                    window.location.href = 'index.html';
+                }, 1500);
+            }
+
+            checkAuth() {
+                if (localStorage.getItem('isAuthenticated') === 'true') {
+                    window.location.href = 'index.html';
+                }
+            }
+
+            loadTheme() {
+                if (localStorage.getItem('darkTheme') === 'true') {
+                    document.body.classList.add('dark-theme');
+                    this.updateThemeButton();
+                }
+            }
+
+            toggleTheme() {
+                document.body.classList.toggle('dark-theme');
+                const isDark = document.body.classList.contains('dark-theme');
+                localStorage.setItem('darkTheme', isDark);
+                this.updateThemeButton();
+            }
+
+            updateThemeButton() {
+                const icon = document.querySelector('.theme-toggle i');
+                const isDark = document.body.classList.contains('dark-theme');
+                
+                if (icon) {
+                    icon.className = isDark ? 'fas fa-sun' : 'fas fa-moon';
+                }
+            }
+
+            showSuccess(message) {
+                this.showNotification(message, 'success');
+            }
+
+            showError(message) {
+                this.showNotification(message, 'error');
+            }
+
+            showNotification(message, type = 'info') {
+                const notification = document.createElement('div');
+                notification.className = `notification notification-${type}`;
+                notification.innerHTML = `
+                    <div class="notification-content">
+                        <i class="fas fa-${this.getNotificationIcon(type)}"></i>
+                        <span>${message}</span>
+                        <button class="notification-close" onclick="this.parentElement.parentElement.remove()">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                `;
+
+                document.body.appendChild(notification);
+
+                setTimeout(() => {
+                    if (notification.parentElement) notification.remove();
+                }, 5000);
+            }
+
+            getNotificationIcon(type) {
+                const icons = {
+                    success: 'check-circle',
+                    error: 'times-circle',
+                    warning: 'exclamation-triangle',
+                    info: 'info-circle'
+                };
+                return icons[type] || 'info-circle';
+            }
+        }
+
+        // Função global para alternar tema
+        function toggleTheme() {
+            window.sistemaLogin.toggleTheme();
+        }
+
+        // Inicialização
+        document.addEventListener('DOMContentLoaded', function() {
+            window.sistemaLogin = new SistemaLogin();
+        });
+    </script>
+</body>
+</html>

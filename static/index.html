@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema Empresarial - Gestão Completa</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- HEADER -->
+    <header class="header">
+        <div class="container">
+            <div class="header-content">
+                <div class="logo">
+                    <img src="icon.ico" alt="Logo" class="logo-img">
+                    <h1>Sistema Empresarial</h1>
+                </div>
+                
+                <nav class="nav-header">
+                    <button class="nav-btn active" data-section="dashboard">
+                        <i class="fas fa-tachometer-alt"></i>
+                        Dashboard
+                    </button>
+                    <button class="nav-btn" data-section="produtos">
+                        <i class="fas fa-box"></i>
+                        Produtos
+                    </button>
+                    <button class="nav-btn" data-section="estoque">
+                        <i class="fas fa-boxes"></i>
+                        Estoque
+                    </button>
+                    <button class="nav-btn" data-section="clientes">
+                        <i class="fas fa-users"></i>
+                        Clientes
+                    </button>
+                    <button class="nav-btn" data-section="vendas">
+                        <i class="fas fa-shopping-cart"></i>
+                        Vendas
+                    </button>
+                    <button class="nav-btn" data-section="categorias">
+                        <i class="fas fa-tags"></i>
+                        Categorias
+                    </button>
+                    <button class="nav-btn" data-section="relatorios">
+                        <i class="fas fa-chart-bar"></i>
+                        Relatórios
+                    </button>
+                </nav>
+                
+                <div class="header-actions">
+                    <button class="btn btn-info" onclick="toggleTheme()">
+                        <i class="fas fa-moon"></i>
+                    </button>
+                    <button class="btn btn-danger" onclick="logout()">
+                        <i class="fas fa-sign-out-alt"></i>
+                        Sair
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- CONTEÚDO PRINCIPAL -->
+    <main class="main-content">
+        <div class="container">
+            <!-- DASHBOARD -->
+            <section id="dashboard" class="section active">
+                <div class="section-header">
+                    <h2><i class="fas fa-tachometer-alt"></i> Dashboard</h2>
+                    <div class="section-actions">
+                        <button class="btn btn-primary" onclick="showModal('add-product-modal')">
+                            <i class="fas fa-plus"></i> Novo Produto
+                        </button>
+                        <button class="btn btn-success" onclick="showModal('add-client-modal')">
+                            <i class="fas fa-user-plus"></i> Novo Cliente
+                        </button>
+                    </div>
+                </div>
+
+                <div class="dashboard-grid">
+                    <div class="card" id="total-produtos">
+                        <div class="card-icon">
+                            <i class="fas fa-box"></i>
+                        </div>
+                        <h3>Total de Produtos</h3>
+                        <div class="number">0</div>
+                        <div class="label">Produtos cadastrados</div>
+                    </div>
+
+                    <div class="card" id="total-clientes">
+                        <div class="card-icon">
+                            <i class="fas fa-users"></i>
+                        </div>
+                        <h3>Total de Clientes</h3>
+                        <div class="number">0</div>
+                        <div class="label">Clientes ativos</div>
+                    </div>
+
+                    <div class="card" id="total-vendas">
+                        <div class="card-icon">
+                            <i class="fas fa-shopping-cart"></i>
+                        </div>
+                        <h3>Total de Vendas</h3>
+                        <div class="number">0</div>
+                        <div class="label">Vendas realizadas</div>
+                    </div>
+
+                    <div class="card" id="valor-vendas">
+                        <div class="card-icon">
+                            <i class="fas fa-dollar-sign"></i>
+                        </div>
+                        <h3>Valor Total</h3>
+                        <div class="number">R$ 0,00</div>
+                        <div class="label">Em vendas</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- PRODUTOS -->
+            <section id="produtos" class="section">
+                <div class="section-header">
+                    <h2><i class="fas fa-box"></i> Produtos</h2>
+                    <div class="section-actions">
+                        <button class="btn btn-primary" onclick="showModal('add-product-modal')">
+                            <i class="fas fa-plus"></i> Novo Produto
+                        </button>
+                    </div>
+                </div>
+
+                <div class="table-container">
+                    <div class="table-header">
+                        <h3><i class="fas fa-list"></i> Lista de Produtos</h3>
+                        <div class="table-actions">
+                            <input type="text" class="form-control" placeholder="Buscar produtos..." style="max-width: 300px;">
+                        </div>
+                    </div>
+
+                    <table id="produtos-table">
+                        <thead>
+                            <tr>
+                                <th>Nome</th>
+                                <th>Categoria</th>
+                                <th>Preço</th>
+                                <th>Estoque</th>
+                                <th>Mínimo</th>
+                                <th>Status</th>
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Dados serão carregados dinamicamente -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- ESTOQUE -->
+            <section id="estoque" class="section">
+                <div class="section-header">
+                    <h2><i class="fas fa-boxes"></i> Estoque</h2>
+                    <div class="section-actions">
+                        <button class="btn btn-success" onclick="showModal('adjust-stock-modal')">
+                            <i class="fas fa-plus"></i> Ajustar Estoque
+                        </button>
+                    </div>
+                </div>
+
+                <div class="table-container">
+                    <div class="table-header">
+                        <h3><i class="fas fa-list"></i> Controle de Estoque</h3>
+                        <div class="table-actions">
+                            <input type="text" class="form-control" placeholder="Buscar no estoque..." style="max-width: 300px;">
+                        </div>
+                    </div>
+
+                    <table id="estoque-table">
+                        <thead>
+                            <tr>
+                                <th>Produto</th>
+                                <th>Quantidade</th>
+                                <th>Mínimo</th>
+                                <th>Status</th>
+                                <th>Última Atualização</th>
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Dados serão carregados dinamicamente -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- CLIENTES -->
+            <section id="clientes" class="section">
+                <div class="section-header">
+                    <h2><i class="fas fa-users"></i> Clientes</h2>
+                    <div class="section-actions">
+                        <button class="btn btn-primary" onclick="showModal('add-client-modal')">
+                            <i class="fas fa-plus"></i> Novo Cliente
+                        </button>
+                    </div>
+                </div>
+
+                <div class="table-container">
+                    <div class="table-header">
+                        <h3><i class="fas fa-list"></i> Lista de Clientes</h3>
+                        <div class="table-actions">
+                            <input type="text" class="form-control" placeholder="Buscar clientes..." style="max-width: 300px;">
+                        </div>
+                    </div>
+
+                    <table id="clientes-table">
+                        <thead>
+                            <tr>
+                                <th>Nome</th>
+                                <th>Email</th>
+                                <th>Telefone</th>
+                                <th>Cidade</th>
+                                <th>Status</th>
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Dados serão carregados dinamicamente -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- VENDAS -->
+            <section id="vendas" class="section">
+                <div class="section-header">
+                    <h2><i class="fas fa-shopping-cart"></i> Vendas</h2>
+                    <div class="section-actions">
+                        <button class="btn btn-primary" onclick="showModal('add-sale-modal')">
+                            <i class="fas fa-plus"></i> Nova Venda
+                        </button>
+                    </div>
+                </div>
+
+                <div class="table-container">
+                    <div class="table-header">
+                        <h3><i class="fas fa-list"></i> Histórico de Vendas</h3>
+                        <div class="table-actions">
+                            <input type="text" class="form-control" placeholder="Buscar vendas..." style="max-width: 300px;">
+                        </div>
+                    </div>
+
+                    <table id="vendas-table">
+                        <thead>
+                            <tr>
+                                <th>Cliente</th>
+                                <th>Produto</th>
+                                <th>Quantidade</th>
+                                <th>Valor</th>
+                                <th>Data</th>
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Dados serão carregados dinamicamente -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- CATEGORIAS -->
+            <section id="categorias" class="section">
+                <div class="section-header">
+                    <h2><i class="fas fa-tags"></i> Categorias</h2>
+                    <div class="section-actions">
+                        <button class="btn btn-primary" onclick="showModal('add-category-modal')">
+                            <i class="fas fa-plus"></i> Nova Categoria
+                        </button>
+                    </div>
+                </div>
+
+                <div class="table-container">
+                    <div class="table-header">
+                        <h3><i class="fas fa-list"></i> Lista de Categorias</h3>
+                        <div class="table-actions">
+                            <input type="text" class="form-control" placeholder="Buscar categorias..." style="max-width: 300px;">
+                        </div>
+                    </div>
+
+                    <table id="categorias-table">
+                        <thead>
+                            <tr>
+                                <th>Nome</th>
+                                <th>Descrição</th>
+                                <th>Status</th>
+                                <th>Observações</th>
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Dados serão carregados dinamicamente -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- RELATÓRIOS -->
+            <section id="relatorios" class="section">
+                <div class="section-header">
+                    <h2><i class="fas fa-chart-bar"></i> Relatórios</h2>
+                    <div class="section-actions">
+                        <button class="btn btn-primary">
+                            <i class="fas fa-download"></i> Exportar
+                        </button>
+                    </div>
+                </div>
+
+                <div class="dashboard-grid">
+                    <div class="card">
+                        <div class="card-icon">
+                            <i class="fas fa-chart-line"></i>
+                        </div>
+                        <h3>Vendas por Período</h3>
+                        <div class="number">Em desenvolvimento</div>
+                        <div class="label">Relatório de vendas</div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-icon">
+                            <i class="fas fa-chart-pie"></i>
+                        </div>
+                        <h3>Produtos Mais Vendidos</h3>
+                        <div class="number">Em desenvolvimento</div>
+                        <div class="label">Top produtos</div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-icon">
+                            <i class="fas fa-chart-area"></i>
+                        </div>
+                        <h3>Estoque por Categoria</h3>
+                        <div class="number">Em desenvolvimento</div>
+                        <div class="label">Distribuição</div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-icon">
+                            <i class="fas fa-chart-bar"></i>
+                        </div>
+                        <h3>Clientes por Região</h3>
+                        <div class="number">Em desenvolvimento</div>
+                        <div class="label">Distribuição geográfica</div>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <!-- MODAIS -->
+    <!-- Modal de Produto -->
+    <div id="add-product-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Adicionar Produto</h2>
+                <span class="close">&times;</span>
+            </div>
+            <div class="modal-body">
+                <form>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="product-name">Nome do Produto</label>
+                            <input type="text" id="product-name" class="form-control" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="product-category">Categoria</label>
+                            <select id="product-category" class="form-control" required>
+                                <option value="">Selecione uma categoria</option>
+                                <option value="Eletrônicos">Eletrônicos</option>
+                                <option value="Periféricos">Periféricos</option>
+                                <option value="Software">Software</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="product-price">Preço</label>
+                            <input type="number" id="product-price" class="form-control" step="0.01" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="product-stock">Estoque</label>
+                            <input type="number" id="product-stock" class="form-control" required>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="product-min-stock">Estoque Mínimo</label>
+                        <input type="number" id="product-min-stock" class="form-control" required>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('add-product-modal')">Cancelar</button>
+                <button class="btn btn-primary">Salvar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Cliente -->
+    <div id="add-client-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Adicionar Cliente</h2>
+                <span class="close">&times;</span>
+            </div>
+            <div class="modal-body">
+                <form>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="client-name">Nome</label>
+                            <input type="text" id="client-name" class="form-control" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="client-email">Email</label>
+                            <input type="email" id="client-email" class="form-control" required>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="client-phone">Telefone</label>
+                            <input type="tel" id="client-phone" class="form-control" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="client-city">Cidade</label>
+                            <input type="text" id="client-city" class="form-control" required>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('add-client-modal')">Cancelar</button>
+                <button class="btn btn-primary">Salvar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Estoque -->
+    <div id="adjust-stock-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Ajustar Estoque</h2>
+                <span class="close">&times;</span>
+            </div>
+            <div class="modal-body">
+                <form>
+                    <div class="form-group">
+                        <label for="stock-product">Produto</label>
+                        <input type="text" id="stock-product" class="form-control" readonly>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="stock-quantity">Quantidade</label>
+                            <input type="number" id="stock-quantity" class="form-control" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="stock-type">Tipo de Ajuste</label>
+                            <select id="stock-type" class="form-control" required>
+                                <option value="entrada">Entrada</option>
+                                <option value="saida">Saída</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="stock-observation">Observação</label>
+                        <textarea id="stock-observation" class="form-control" rows="3"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('adjust-stock-modal')">Cancelar</button>
+                <button class="btn btn-primary">Ajustar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Venda -->
+    <div id="add-sale-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Nova Venda</h2>
+                <span class="close">&times;</span>
+            </div>
+            <div class="modal-body">
+                <form>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="sale-client">Cliente</label>
+                            <select id="sale-client" class="form-control" required>
+                                <option value="">Selecione um cliente</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="sale-product">Produto</label>
+                            <input type="text" id="sale-product" class="form-control" readonly>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="sale-quantity">Quantidade</label>
+                            <input type="number" id="sale-quantity" class="form-control" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="sale-price">Preço Unitário</label>
+                            <input type="number" id="sale-price" class="form-control" step="0.01" required>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('add-sale-modal')">Cancelar</button>
+                <button class="btn btn-primary">Finalizar Venda</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Categoria -->
+    <div id="add-category-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Adicionar Categoria</h2>
+                <span class="close">&times;</span>
+            </div>
+            <div class="modal-body">
+                <form>
+                    <div class="form-group">
+                        <label for="category-name">Nome da Categoria</label>
+                        <input type="text" id="category-name" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="category-description">Descrição</label>
+                        <textarea id="category-description" class="form-control" rows="3"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="category-observations">Observações</label>
+                        <textarea id="category-observations" class="form-control" rows="2"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('add-category-modal')">Cancelar</button>
+                <button class="btn btn-primary">Salvar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- SCRIPTS -->
+    <script>
+        // Verificação de autenticação
+        if (localStorage.getItem('isAuthenticated') !== 'true') {
+            window.location.href = 'login.html';
+        }
+    </script>
+    <script src="app.js"></script>
+</body>
+</html>
