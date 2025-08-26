@@ -1034,6 +1034,29 @@ tbody tr:hover {
     margin: 0;
 }
 
+.login-features {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 15px;
+    margin-top: 20px;
+}
+
+.feature {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    color: white;
+    font-size: 14px;
+}
+
+.feature i {
+    color: #ffd700;
+    font-size: 16px;
+}
+
 .login-form {
     margin-bottom: 30px;
 }

@@ -149,6 +149,7 @@ class SistemaEmpresarial {
                     const clientesSalvos = localStorage.getItem('clientes');
                     const categoriasSalvos = localStorage.getItem('categorias');
                     const vendasSalvos = localStorage.getItem('vendas');
+                    const estoqueSalvos = localStorage.getItem('estoque');
 
                     if (produtosSalvos) {
                         this.data.produtos = JSON.parse(produtosSalvos);
@@ -194,8 +195,12 @@ class SistemaEmpresarial {
                         this.salvarVendas();
                     }
 
-                    // Atualiza estoque baseado nos produtos
-                    this.atualizarEstoque();
+                    // Carrega estoque salvo ou atualiza baseado nos produtos
+                    if (estoqueSalvos) {
+                        this.data.estoque = JSON.parse(estoqueSalvos);
+                    } else {
+                        this.atualizarEstoque();
+                    }
                     console.log('📱 Dados locais carregados');
                 }
 
@@ -596,11 +601,22 @@ class SistemaEmpresarial {
                 }
 
                 excluirCliente(id) {
-                    this.excluirCliente(id);
+                    if (confirm('Tem certeza que deseja excluir este cliente?')) {
+                        this.data.clientes = this.data.clientes.filter(c => c.id != id);
+                        this.salvarClientes();
+                        this.showNotification('Cliente excluído com sucesso', 'success');
+                        this.updateTabelaClientes();
+                        this.updateDashboard();
+                    }
                 }
 
                 editarProduto(id) {
-                    this.editarProduto(id);
+                    const produto = this.data.produtos.find(p => p.id == id);
+                    if (produto) {
+                        this.preencherModalProduto(produto);
+                        this.showModal('add-product-modal');
+                        this.showNotification('Editando produto...', 'info');
+                    }
                 }
 
                 ajustarEstoque(id) {
@@ -617,7 +633,14 @@ class SistemaEmpresarial {
                 }
 
                 excluirProduto(id) {
-                    this.excluirProduto(id);
+                    if (confirm('Tem certeza que deseja excluir este produto?')) {
+                        this.data.produtos = this.data.produtos.filter(p => p.id != id);
+                        this.atualizarEstoque();
+                        this.salvarProdutos();
+                        this.showNotification('Produto excluído com sucesso', 'success');
+                        this.updateTabelaProdutos();
+                        this.updateDashboard();
+                    }
                 }
 
                 editarCategoria(id) {
@@ -630,7 +653,13 @@ class SistemaEmpresarial {
                 }
 
                 excluirCategoria(id) {
-                    this.excluirCategoria(id);
+                    if (confirm('Tem certeza que deseja excluir esta categoria?')) {
+                        this.data.categorias = this.data.categorias.filter(c => c.id != id);
+                        this.salvarCategorias();
+                        this.showNotification('Categoria excluída com sucesso', 'success');
+                        this.updateTabelaCategorias();
+                        this.updateDashboard();
+                    }
                 }
 
                 verDetalhesVenda(id) {
@@ -746,55 +775,57 @@ class SistemaEmpresarial {
         ]);
     }
 
-    updateTabelaProdutos() {
-        const tbody = document.querySelector('#produtos-table tbody');
-        if (!tbody) return;
-        
-        tbody.innerHTML = '';
-        
-        if (this.data.produtos.length === 0) {
-            tbody.innerHTML = `
-                <tr class="empty-row">
-                    <td colspan="7">
-                        <div class="empty-message">
-                            <div class="empty-state">
-                                <i class="fas fa-box"></i>
-                                <h4>Nenhum produto encontrado</h4>
-                                <p>Adicione seu primeiro produto para começar</p>
-                            </div>
-                        </div>
-                    </td>
-                </tr>
-            `;
-            return;
-        }
-        
-        this.data.produtos.forEach(produto => {
-            const row = document.createElement('tr');
-            row.setAttribute('data-id', produto.id);
-            row.innerHTML = `
-                <td>${produto.nome || 'N/A'}</td>
-                <td>${produto.categoria || 'Sem categoria'}</td>
-                <td>R$ ${(produto.preco || 0).toFixed(2)}</td>
-                <td>${produto.estoque || 0}</td>
-                <td>${produto.estoque_minimo || 0}</td>
-                <td>
-                    <span class="status-badge ${(produto.estoque || 0) > (produto.estoque_minimo || 0) ? 'success' : 'warning'}">
-                        ${(produto.estoque || 0) > (produto.estoque_minimo || 0) ? 'Disponível' : 'Baixo'}
-                    </span>
-                </td>
-                <td></td>
-            `;
-            tbody.appendChild(row);
-        });
-        
-        this.addActionButtonsToRows(tbody, [
-            { type: 'edit', icon: 'fas fa-edit', class: 'btn-warning', action: 'editarProduto' },
-            { type: 'stock', icon: 'fas fa-boxes', class: 'btn-success', action: 'ajustarEstoque' },
-            { type: 'sale', icon: 'fas fa-shopping-cart', class: 'btn-primary', action: 'vendaRapida' },
-            { type: 'delete', icon: 'fas fa-trash', class: 'btn-danger', action: 'excluirProduto' }
-        ]);
-    }
+         updateTabelaProdutos() {
+         const tbody = document.querySelector('#produtos-table tbody');
+         if (!tbody) return;
+         
+         tbody.innerHTML = '';
+         
+         if (this.data.produtos.length === 0) {
+             tbody.innerHTML = `
+                 <tr class="empty-row">
+                     <td colspan="7">
+                         <div class="empty-message">
+                             <div class="empty-state">
+                                 <i class="fas fa-box"></i>
+                                 <h4>Nenhum produto encontrado</h4>
+                                 <p>Adicione seu primeiro produto para começar</p>
+                             </div>
+                         </div>
+                     </td>
+                 </tr>
+             `;
+             return;
+         }
+         
+         this.data.produtos.forEach(produto => {
+             const row = document.createElement('tr');
+             row.setAttribute('data-id', produto.id);
+             row.innerHTML = `
+                 <td>${produto.nome || 'N/A'}</td>
+                 <td>${produto.categoria || 'Sem categoria'}</td>
+                 <td>R$ ${(produto.preco || 0).toFixed(2)}</td>
+                 <td>${produto.estoque || 0}</td>
+                 <td>${produto.estoque_minimo || 0}</td>
+                 <td>
+                     <span class="status-badge ${(produto.estoque || 0) > (produto.estoque_minimo || 0) ? 'success' : 'warning'}">
+                         ${(produto.estoque || 0) > (produto.estoque_minimo || 0) ? 'Disponível' : 'Baixo'}
+                     </span>
+                 </td>
+                 <td></td>
+             `;
+             tbody.appendChild(row);
+         });
+         
+         this.addActionButtonsToRows(tbody, [
+             { type: 'edit', icon: 'fas fa-edit', class: 'btn-warning', action: 'editarProduto' },
+             { type: 'stock', icon: 'fas fa-boxes', class: 'btn-success', action: 'ajustarEstoque' },
+             { type: 'sale', icon: 'fas fa-shopping-cart', class: 'btn-primary', action: 'vendaRapida' },
+             { type: 'delete', icon: 'fas fa-trash', class: 'btn-danger', action: 'excluirProduto' }
+         ]);
+         
+         console.log('📦 Tabela de produtos atualizada:', this.data.produtos);
+     }
 
     updateTabelaEstoque() {
         const tbody = document.querySelector('#estoque-table tbody');
@@ -959,6 +990,8 @@ class SistemaEmpresarial {
                         quantidade: p.estoque,
                         minimo: p.estoque_minimo
                     }));
+                    // Salva o estoque atualizado
+                    localStorage.setItem('estoque', JSON.stringify(this.data.estoque));
                 }
 
                 // FUNÇÕES DE CRUD COMPLETAS
