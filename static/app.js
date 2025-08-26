@@ -187,30 +187,48 @@ class SistemaEmpresarial {
     async loadCategorias() {
         try {
             if (this.isConnected && this.supabase) {
+                console.log('🔍 Buscando dados de categorias no Supabase...');
+                
                 const { data, error } = await this.supabase
                     .from('categorias')
                     .select('*')
                     .eq('ativo', true);
                 
-                if (error) throw error;
+                if (error) {
+                    console.error('❌ Erro ao buscar categorias:', error);
+                    throw error;
+                }
                 
-                // Processa os dados para garantir compatibilidade
-                this.data.categorias = (data || []).map(categoria => ({
-                    ...categoria,
-                    nome: categoria.nome || categoria.nome_categoria || 'Categoria sem nome',
-                    descricao: categoria.descricao || categoria.descricao_categoria || 'Sem descrição',
-                    status: categoria.status || 'ativo',
-                    observacoes: categoria.observacoes || categoria.obs || 'Sem observações'
-                }));
+                if (data && data.length > 0) {
+                    console.log('✅ Dados de categorias carregados do Supabase:', data);
+                    
+                    // Processa os dados para garantir compatibilidade
+                    this.data.categorias = data.map(categoria => ({
+                        ...categoria,
+                        nome: categoria.nome || categoria.nome_categoria || 'Categoria sem nome',
+                        descricao: categoria.descricao || categoria.descricao_categoria || 'Sem descrição',
+                        status: categoria.status || 'ativo',
+                        observacoes: categoria.observacoes || categoria.obs || 'Sem observações'
+                    }));
+                    
+                    console.log('🏷️ Categorias mapeadas:', this.data.categorias);
+                    
+                    // Salva no localStorage como backup
+                    localStorage.setItem('categorias', JSON.stringify(this.data.categorias));
+                    
+                } else {
+                    console.warn('⚠️ Nenhuma categoria encontrada na tabela categorias');
+                    this.loadDadosLocais();
+                }
                 
-                console.log(`🏷️ ${this.data.categorias.length} categorias carregadas do Supabase`);
             } else {
-                console.warn('⚠️ Supabase não disponível, usando dados locais');
+                console.warn('⚠️ Supabase não disponível, carregando dados locais...');
                 this.loadDadosLocais();
             }
         } catch (error) {
             console.error('❌ Erro ao carregar categorias:', error);
-            this.data.categorias = [];
+            // Em caso de erro, tenta carregar dados locais
+            this.loadDadosLocais();
         }
     }
 
@@ -895,9 +913,64 @@ class SistemaEmpresarial {
 
     excluirCategoria(id) {
         if (confirm('Tem certeza que deseja excluir esta categoria?')) {
+            try {
+                // Tenta excluir no Supabase primeiro
+                if (this.isConnected && this.supabase) {
+                    this.excluirCategoriaNoSupabase(id);
+                } else {
+                    // Se não estiver conectado, exclui localmente
+                    this.data.categorias = this.data.categorias.filter(c => c.id != id);
+                    this.salvarCategorias();
+                    this.showNotification('Categoria excluída com sucesso! (Modo local)', 'success');
+                    
+                    // Atualiza a interface
+                    this.updateTabelaCategorias();
+                    this.updateDashboard();
+                }
+            } catch (error) {
+                console.error('❌ Erro ao excluir categoria:', error);
+                this.showNotification('Erro ao excluir categoria!', 'error');
+            }
+        }
+    }
+
+    // Função para excluir categoria no Supabase
+    async excluirCategoriaNoSupabase(id) {
+        try {
+            console.log('🗑️ Excluindo categoria no Supabase:', id);
+            
+            const { data, error } = await this.supabase
+                .from('categorias')
+                .update({ ativo: false })
+                .eq('id', id);
+            
+            if (error) {
+                console.error('❌ Erro ao excluir categoria no Supabase:', error);
+                throw error;
+            }
+            
+            console.log('✅ Categoria excluída no Supabase:', data);
+            
+            // Remove da lista local
             this.data.categorias = this.data.categorias.filter(c => c.id != id);
             this.salvarCategorias();
-            this.showNotification('Categoria excluída com sucesso', 'success');
+            
+            this.showNotification('Categoria excluída com sucesso no Supabase!', 'success');
+            
+            // Atualiza a interface
+            this.updateTabelaCategorias();
+            this.updateDashboard();
+            
+        } catch (error) {
+            console.error('❌ Erro ao excluir no Supabase, excluindo localmente:', error);
+            
+            // Em caso de erro, exclui localmente
+            this.data.categorias = this.data.categorias.filter(c => c.id != id);
+            this.salvarCategorias();
+            
+            this.showNotification('Categoria excluída localmente (erro no Supabase)', 'warning');
+            
+            // Atualiza a interface
             this.updateTabelaCategorias();
             this.updateDashboard();
         }
@@ -1070,8 +1143,6 @@ class SistemaEmpresarial {
                 <td>${produto.nome || 'N/A'}</td>
                 <td>${produto.categoria || 'Sem categoria'}</td>
                 <td class="preco-cell">R$ ${preco.toFixed(2)}</td>
-                <td class="estoque-cell">${estoque}</td>
-                <td class="estoque-minimo-cell">${estoqueMinimo}</td>
                 <td>
                     <span class="status-badge ${status}">
                         ${statusText}
@@ -1084,7 +1155,12 @@ class SistemaEmpresarial {
         });
         
         // Adiciona botões de ação
-        this.addActionButtonsToRows('#produtos-table', 'produtos');
+        this.addActionButtonsToRows(tbody, [
+            { type: 'edit', icon: 'fas fa-edit', class: 'btn-warning', action: 'editarProduto' },
+            { type: 'stock', icon: 'fas fa-boxes', class: 'btn-success', action: 'ajustarEstoque' },
+            { type: 'sale', icon: 'fas fa-shopping-cart', class: 'btn-primary', action: 'vendaRapida' },
+            { type: 'delete', icon: 'fas fa-trash', class: 'btn-danger', action: 'excluirProduto' }
+        ]);
         
         console.log('📦 Tabela de produtos atualizada com sucesso!');
     }
@@ -1224,26 +1300,37 @@ class SistemaEmpresarial {
         
         tbody.innerHTML = '';
         
+        console.log('🏷️ Atualizando tabela de categorias...');
+        console.log('🏷️ Dados de categorias disponíveis:', this.data.categorias);
+        
+        // Se não há dados de categorias, tenta recarregar do Supabase primeiro
         if (this.data.categorias.length === 0) {
-            tbody.innerHTML = `
-                <tr class="empty-row">
-                    <td colspan="5">
-                        <div class="empty-message">
-                            <div class="empty-state">
-                                <i class="fas fa-tags"></i>
-                                <h4>Nenhuma categoria encontrada</h4>
-                                <p>Adicione sua primeira categoria para começar</p>
-                            </div>
-                        </div>
-                    </td>
-                </tr>
-            `;
+            console.log('🏷️ Nenhuma categoria encontrada, tentando recarregar...');
+            // Tenta recarregar do Supabase se estiver conectado
+            if (this.isConnected && this.supabase) {
+                this.loadCategorias().then(() => {
+                    // Recursivamente chama a função após carregar os dados
+                    this.updateTabelaCategorias();
+                }).catch(() => {
+                    // Se falhar, mostra mensagem de erro
+                    this.showNotification('Erro ao carregar dados das categorias!', 'error');
+                });
+            }
             return;
         }
         
-        this.data.categorias.forEach(categoria => {
+        // Renderiza cada categoria
+        this.data.categorias.forEach((categoria, index) => {
             const row = document.createElement('tr');
             row.setAttribute('data-id', categoria.id);
+            
+            console.log(`🏷️ Renderizando categoria ${index + 1}:`, {
+                nome: categoria.nome,
+                descricao: categoria.descricao,
+                status: categoria.status,
+                observacoes: categoria.observacoes
+            });
+            
             row.innerHTML = `
                 <td>${categoria.nome || 'N/A'}</td>
                 <td>${categoria.descricao || 'N/A'}</td>
@@ -1264,7 +1351,7 @@ class SistemaEmpresarial {
             { type: 'delete', icon: 'fas fa-trash', class: 'btn-danger', action: 'excluirCategoria' }
         ]);
         
-        console.log('🏷️ Tabela de categorias atualizada:', this.data.categorias);
+        console.log('🏷️ Tabela de categorias atualizada com sucesso!');
     }
 
     updateRelatorios() {
@@ -1974,30 +2061,203 @@ class SistemaEmpresarial {
     }
 
     adicionarCategoria(categoria) {
-        categoria.id = this.gerarId();
-        this.data.categorias.push(categoria);
-        this.salvarCategorias();
-        this.showNotification('Categoria adicionada com sucesso!', 'success');
-        this.updateTabelaCategorias();
-        this.updateDashboard();
+        try {
+            // Gera ID único
+            categoria.id = this.gerarId();
+            
+            // Tenta salvar no Supabase primeiro
+            if (this.isConnected && this.supabase) {
+                this.salvarCategoriaNoSupabase(categoria);
+            } else {
+                // Se não estiver conectado, salva localmente
+                this.data.categorias.push(categoria);
+                this.salvarCategorias();
+                this.showNotification('Categoria adicionada com sucesso! (Modo local)', 'success');
+            }
+            
+            // Atualiza a interface
+            this.updateTabelaCategorias();
+            this.updateDashboard();
+            
+        } catch (error) {
+            console.error('❌ Erro ao adicionar categoria:', error);
+            this.showNotification('Erro ao adicionar categoria!', 'error');
+        }
+    }
+
+    // Função para salvar categoria no Supabase
+    async salvarCategoriaNoSupabase(categoria) {
+        try {
+            console.log('💾 Salvando categoria no Supabase:', categoria);
+            
+            const { data, error } = await this.supabase
+                .from('categorias')
+                .insert([{
+                    nome: categoria.nome,
+                    descricao: categoria.descricao,
+                    observacoes: categoria.observacoes,
+                    status: categoria.status || 'ativo',
+                    ativo: true
+                }]);
+            
+            if (error) {
+                console.error('❌ Erro ao salvar categoria no Supabase:', error);
+                throw error;
+            }
+            
+            console.log('✅ Categoria salva no Supabase:', data);
+            
+            // Adiciona à lista local
+            this.data.categorias.push(categoria);
+            
+            // Salva no localStorage como backup
+            this.salvarCategorias();
+            
+            this.showNotification('Categoria adicionada com sucesso no Supabase!', 'success');
+            
+        } catch (error) {
+            console.error('❌ Erro ao salvar no Supabase, salvando localmente:', error);
+            
+            // Em caso de erro, salva localmente
+            this.data.categorias.push(categoria);
+            this.salvarCategorias();
+            
+            this.showNotification('Categoria adicionada localmente (erro no Supabase)', 'warning');
+        }
     }
 
     atualizarCategoria(id, dados) {
-        const index = this.data.categorias.findIndex(c => c.id == id);
-        if (index !== -1) {
-            this.data.categorias[index] = { ...this.data.categorias[index], ...dados };
-            this.salvarCategorias();
-            this.showNotification('Categoria atualizada com sucesso!', 'success');
-            this.updateTabelaCategorias();
-            this.updateDashboard();
+        try {
+            const index = this.data.categorias.findIndex(c => c.id == id);
+            if (index !== -1) {
+                const categoriaOriginal = this.data.categorias[index];
+                const categoriaAtualizada = { ...categoriaOriginal, ...dados };
+                
+                // Tenta atualizar no Supabase primeiro
+                if (this.isConnected && this.supabase) {
+                    this.atualizarCategoriaNoSupabase(id, dados);
+                } else {
+                    // Se não estiver conectado, atualiza localmente
+                    this.data.categorias[index] = categoriaAtualizada;
+                    this.salvarCategorias();
+                    this.showNotification('Categoria atualizada com sucesso! (Modo local)', 'success');
+                }
+                
+                // Atualiza a interface
+                this.updateTabelaCategorias();
+                this.updateDashboard();
+            }
+        } catch (error) {
+            console.error('❌ Erro ao atualizar categoria:', error);
+            this.showNotification('Erro ao atualizar categoria!', 'error');
+        }
+    }
+
+    // Função para atualizar categoria no Supabase
+    async atualizarCategoriaNoSupabase(id, dados) {
+        try {
+            console.log('💾 Atualizando categoria no Supabase:', { id, dados });
+            
+            const { data, error } = await this.supabase
+                .from('categorias')
+                .update({
+                    nome: dados.nome,
+                    descricao: dados.descricao,
+                    observacoes: dados.observacoes,
+                    status: dados.status || 'ativo'
+                })
+                .eq('id', id);
+            
+            if (error) {
+                console.error('❌ Erro ao atualizar categoria no Supabase:', error);
+                throw error;
+            }
+            
+            console.log('✅ Categoria atualizada no Supabase:', data);
+            
+            // Atualiza na lista local
+            const index = this.data.categorias.findIndex(c => c.id == id);
+            if (index !== -1) {
+                this.data.categorias[index] = { ...this.data.categorias[index], ...dados };
+                this.salvarCategorias();
+            }
+            
+            this.showNotification('Categoria atualizada com sucesso no Supabase!', 'success');
+            
+        } catch (error) {
+            console.error('❌ Erro ao atualizar no Supabase, atualizando localmente:', error);
+            
+            // Em caso de erro, atualiza localmente
+            const index = this.data.categorias.findIndex(c => c.id == id);
+            if (index !== -1) {
+                this.data.categorias[index] = { ...this.data.categorias[index], ...dados };
+                this.salvarCategorias();
+            }
+            
+            this.showNotification('Categoria atualizada localmente (erro no Supabase)', 'warning');
         }
     }
 
     excluirCategoria(id) {
         if (confirm('Tem certeza que deseja excluir esta categoria?')) {
+            try {
+                // Tenta excluir no Supabase primeiro
+                if (this.isConnected && this.supabase) {
+                    this.excluirCategoriaNoSupabase(id);
+                } else {
+                    // Se não estiver conectado, exclui localmente
+                    this.data.categorias = this.data.categorias.filter(c => c.id != id);
+                    this.salvarCategorias();
+                    this.showNotification('Categoria excluída com sucesso! (Modo local)', 'success');
+                    
+                    // Atualiza a interface
+                    this.updateTabelaCategorias();
+                    this.updateDashboard();
+                }
+            } catch (error) {
+                console.error('❌ Erro ao excluir categoria:', error);
+                this.showNotification('Erro ao excluir categoria!', 'error');
+            }
+        }
+    }
+
+    // Função para excluir categoria no Supabase
+    async excluirCategoriaNoSupabase(id) {
+        try {
+            console.log('🗑️ Excluindo categoria no Supabase:', id);
+            
+            const { data, error } = await this.supabase
+                .from('categorias')
+                .update({ ativo: false })
+                .eq('id', id);
+            
+            if (error) {
+                console.error('❌ Erro ao excluir categoria no Supabase:', error);
+                throw error;
+            }
+            
+            console.log('✅ Categoria excluída no Supabase:', data);
+            
+            // Remove da lista local
             this.data.categorias = this.data.categorias.filter(c => c.id != id);
             this.salvarCategorias();
-            this.showNotification('Categoria excluída com sucesso', 'success');
+            
+            this.showNotification('Categoria excluída com sucesso no Supabase!', 'success');
+            
+            // Atualiza a interface
+            this.updateTabelaCategorias();
+            this.updateDashboard();
+            
+        } catch (error) {
+            console.error('❌ Erro ao excluir no Supabase, excluindo localmente:', error);
+            
+            // Em caso de erro, exclui localmente
+            this.data.categorias = this.data.categorias.filter(c => c.id != id);
+            this.salvarCategorias();
+            
+            this.showNotification('Categoria excluída localmente (erro no Supabase)', 'warning');
+            
+            // Atualiza a interface
             this.updateTabelaCategorias();
             this.updateDashboard();
         }
@@ -2257,6 +2517,29 @@ class SistemaEmpresarial {
         } catch (error) {
             console.error('❌ Erro ao recarregar produtos:', error);
             this.showNotification('Erro ao recarregar produtos!', 'error');
+        }
+    }
+
+    // Função para forçar recarga específica das categorias
+    async recarregarCategorias() {
+        try {
+            console.log('🔄 Forçando recarga das categorias...');
+            this.showNotification('Recarregando dados do Supabase...', 'info');
+            
+            // Limpa dados atuais
+            this.data.categorias = [];
+            
+            // Recarrega do Supabase
+            await this.loadCategorias();
+            
+            // Atualiza a tabela
+            this.updateTabelaCategorias();
+            
+            this.showNotification('Categorias recarregadas com sucesso!', 'success');
+            
+        } catch (error) {
+            console.error('❌ Erro ao recarregar categorias:', error);
+            this.showNotification('Erro ao recarregar categorias!', 'error');
         }
     }
 

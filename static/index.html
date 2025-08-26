@@ -140,14 +140,12 @@
                         </div>
                     </div>
 
-                    <table id="produtos-table">
+                    <table id="produtos-table" class="data-table">
                         <thead>
                             <tr>
                                 <th>Nome</th>
                                 <th>Categoria</th>
                                 <th>Preço</th>
-                                <th>Estoque</th>
-                                <th>Mínimo</th>
                                 <th>Status</th>
                                 <th>Ações</th>
                             </tr>
@@ -278,6 +276,9 @@
                 <div class="section-header">
                     <h2><i class="fas fa-tags"></i> Categorias</h2>
                     <div class="section-actions">
+                        <button class="btn btn-success" onclick="window.sistema.recarregarCategorias()">
+                            <i class="fas fa-sync-alt"></i> Recarregar do Supabase
+                        </button>
                         <button class="btn btn-primary" onclick="showModal('add-category-modal')">
                             <i class="fas fa-plus"></i> Nova Categoria
                         </button>
